@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@ark-ui/react": "^5.26.0",
+    "@tanstack/react-form": "^1.23.7",
     "lucide-react": "^0.545.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "vite-tsconfig-paths": "^5.1.4"
+    "vite-tsconfig-paths": "^5.1.4",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
