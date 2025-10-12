@@ -1,8 +1,8 @@
 import { Field } from "~/components/ui/field";
 import { FileTextIcon } from "lucide-react";
 import { css } from "styled-system/css";
-import { Fieldset } from "../ui/fieldset";
-import { Textarea } from "../ui/textarea";
+import { Fieldset } from "../../../components/ui/fieldset";
+import { Textarea } from "../../../components/ui/textarea";
 import { HStack } from "styled-system/jsx";
 
 export default function AdditionalInformationSection() {

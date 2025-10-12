@@ -3,7 +3,7 @@ import { Field } from "~/components/ui/field";
 import { Checkbox } from "~/components/ui/checkbox";
 import { MapIcon } from "lucide-react";
 import { css } from "styled-system/css";
-import { Fieldset } from "../ui/fieldset";
+import { Fieldset } from "../../../components/ui/fieldset";
 import { useState } from "react";
 
 export default function AltitudeCorrectionSection() {

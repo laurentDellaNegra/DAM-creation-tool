@@ -1,7 +1,12 @@
-import MapCreationForm from "./components/MapCreationForm";
+import { Suspense } from "react";
+import MapCreationPage from "./features/map-creation-tool/page";
 
 function App() {
-  return <MapCreationForm />;
+  return (
+    <Suspense fallback={<p>Loading...</p>}>
+      <MapCreationPage />
+    </Suspense>
+  );
 }
 
 export default App;
