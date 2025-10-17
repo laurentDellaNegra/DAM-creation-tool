@@ -1,37 +1,26 @@
 import { useStore } from "@tanstack/react-form";
 import { useFieldContext } from "~/hooks/form-context";
-import { Field } from "../ui/field";
+import { Checkbox, type CheckboxProps } from "../ui/checkbox";
+import { css } from "styled-system/css";
 
-export type TextFieldProps = {
+export interface CheckboxFieldProps extends CheckboxProps {
   label: string;
-  placeholder?: string;
-  helperText?: string;
-};
+}
 
-export default function CheckboxField({
-  label,
-  placeholder,
-  helperText,
-}: TextFieldProps) {
-  const field = useFieldContext<string>();
+export default function CheckboxField({ label, ...rest }: CheckboxFieldProps) {
+  const field = useFieldContext<boolean>();
 
   const errors = useStore(field.store, (state) => state.meta.errors);
 
   console.log(errors);
 
   return (
-    <Field.Root invalid={errors.length > 0}>
-      <Field.Label>{label}</Field.Label>
-      <Field.Input
-        placeholder={placeholder}
-        value={field.state.value}
-        onChange={(e) => field.handleChange(e.target.value)}
-        onBlur={field.handleBlur}
-      />
-      <Field.HelperText>{helperText}</Field.HelperText>
-      {errors.map((error) => (
-        <Field.ErrorText key={error}>{error.message}</Field.ErrorText>
-      ))}
-    </Field.Root>
+    <Checkbox
+      {...rest}
+      onCheckedChange={({ checked }) => field.handleChange(checked === true)}
+      checked={field.state.value}
+    >
+      <span className={css({ fontSize: "sm" })}>{label}</span>
+    </Checkbox>
   );
 }

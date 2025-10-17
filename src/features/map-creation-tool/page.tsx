@@ -1,4 +1,4 @@
-import { Stack, Flex, Box } from "styled-system/jsx";
+import { Stack, Box } from "styled-system/jsx";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { ListTodoIcon } from "lucide-react";
@@ -7,6 +7,7 @@ import { useAppForm } from "~/hooks/form";
 import { damFormOpts } from "./shared-form";
 import { damSchema } from "./dam-schemas";
 import { GeneralFields } from "./sections/general-fields";
+import { PeriodFields } from "./sections/period-fields";
 
 export default function MapCreationPage() {
   const form = useAppForm({
@@ -46,11 +47,10 @@ export default function MapCreationPage() {
             <Card.Body>
               <Stack gap="6">
                 {/* Basic Information Section */}
-                {/* <BasicSection /> */}
                 <GeneralFields form={form} />
 
                 {/* Today/Repetitive Periods Section */}
-                {/* <PeriodSection /> */}
+                <PeriodFields form={form} />
 
                 {/* Altitude Corrections Section */}
                 {/* <AltitudeCorrectionSection /> */}
