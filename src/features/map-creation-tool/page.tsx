@@ -9,6 +9,7 @@ import { damSchema } from "./dam-schemas";
 import { GeneralFields } from "./sections/general-fields";
 import { PeriodFields } from "./sections/period-fields";
 import { AltitudeCorrectionFields } from "./sections/altitude-correction-fields";
+import { AdditionalInformationFields } from "./sections/additional-information-fields";
 
 export default function MapCreationPage() {
   const form = useAppForm({
@@ -57,7 +58,7 @@ export default function MapCreationPage() {
                 <AltitudeCorrectionFields form={form} />
 
                 {/* Additional Information Section */}
-                {/* <AdditionalInformationSection /> */}
+                <AdditionalInformationFields form={form} />
               </Stack>
             </Card.Body>
 

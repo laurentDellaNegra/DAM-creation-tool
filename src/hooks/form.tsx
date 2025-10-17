@@ -6,6 +6,7 @@ import RangePickerField from "~/components/form/range-picker-field.tsx";
 import SwitchField from "~/components/form/switch-field.tsx";
 import SelectField from "~/components/form/select-field.tsx";
 import CheckboxField from "~/components/form/checkbox-field.tsx";
+import TextAreaField from "~/components/form/text-area-field.tsx";
 
 export const { useAppForm, withForm, withFieldGroup } = createFormHook({
   fieldComponents: {
@@ -13,6 +14,7 @@ export const { useAppForm, withForm, withFieldGroup } = createFormHook({
     SelectField,
     SwitchField,
     RangePickerField,
+    TextAreaField,
     TextField,
   },
   formComponents: {
