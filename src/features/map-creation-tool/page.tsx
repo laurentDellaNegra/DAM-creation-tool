@@ -8,6 +8,7 @@ import { damFormOpts } from "./shared-form";
 import { damSchema } from "./dam-schemas";
 import { GeneralFields } from "./sections/general-fields";
 import { PeriodFields } from "./sections/period-fields";
+import { AltitudeCorrectionFields } from "./sections/altitude-correction-fields";
 
 export default function MapCreationPage() {
   const form = useAppForm({
@@ -53,7 +54,7 @@ export default function MapCreationPage() {
                 <PeriodFields form={form} />
 
                 {/* Altitude Corrections Section */}
-                {/* <AltitudeCorrectionSection /> */}
+                <AltitudeCorrectionFields form={form} />
 
                 {/* Additional Information Section */}
                 {/* <AdditionalInformationSection /> */}
