@@ -3,9 +3,9 @@ use chrono::NaiveDate;
 use dam_core::{
     AltitudeCorrection, BufferFilter, Coordinate, DamCreation, DamMap, DateRange,
     DistributionSelection, LevelUnit, MAX_POLYGON_POINTS, ManualGeometry, ManualMap,
-    ManualMapAttributes, ManualMapCategory, ManualMapRendering, MapCatalog, Period, PolygonNode,
-    SelectedStaticMap, StaticMap, TextInfo, TextNumberColor, TextNumberSize, ValidationIssue,
-    Weekday, default_distribution,
+    ManualMapAttributes, ManualMapCategory, ManualMapRendering, MapCatalog, MapDefaults, Period,
+    PolygonNode, SelectedStaticMap, StaticMap, TextInfo, TextNumberColor, TextNumberSize,
+    ValidationIssue, Weekday, default_distribution,
 };
 use std::collections::BTreeSet;
 
@@ -733,6 +733,55 @@ impl DamFormState {
                 active
             };
             self.possible_weekdays = possible;
+        }
+    }
+
+    pub fn apply_defaults(&mut self, defaults: &MapDefaults) {
+        if let Some(ref val) = defaults.lower_level {
+            for period in &mut self.periods {
+                period.lower.value = val.clone();
+            }
+        }
+        if let Some(unit) = defaults.lower_unit {
+            for period in &mut self.periods {
+                period.lower.explicit_unit = unit;
+            }
+        }
+        if let Some(ref val) = defaults.upper_level {
+            for period in &mut self.periods {
+                period.upper.value = val.clone();
+            }
+        }
+        if let Some(unit) = defaults.upper_unit {
+            for period in &mut self.periods {
+                period.upper.explicit_unit = unit;
+            }
+        }
+        if let Some(bt) = defaults.start_indication {
+            for period in &mut self.periods {
+                period.start_indication = bt;
+            }
+        }
+        if let Some(et) = defaults.end_indication {
+            for period in &mut self.periods {
+                period.end_indication = et;
+            }
+        }
+        if let Some(dl) = defaults.display_levels {
+            self.display_levels = dl;
+        }
+        if let Some(ac) = defaults.altitude_correction {
+            self.altitude_correction = ac;
+        }
+        if let Some(ub) = defaults.upper_buffer {
+            self.upper_buffer = ub;
+        }
+        if let Some(lb) = defaults.lower_buffer {
+            self.lower_buffer = lb;
+        }
+        if let Some(ref text) = defaults.text {
+            self.text = text.clone();
+            self.display_text = true;
         }
     }
 

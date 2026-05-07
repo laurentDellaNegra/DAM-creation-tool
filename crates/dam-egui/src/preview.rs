@@ -1,12 +1,12 @@
 use crate::form::{ClickTarget, ManualMapState, NextClickInfo};
 use dam_core::{
     Coordinate, ManualGeometry, ManualMap, ManualMapAttributes, ManualMapCategory,
-    ManualMapRendering, TextNumberColor, TextNumberSize, expand_polygon_nodes,
+    ManualMapRendering, PreviewPath, TextNumberColor, TextNumberSize, expand_polygon_nodes,
 };
 
 pub struct PreviewOverlay {
-    base_paths: Vec<Vec<Coordinate>>,
-    selected_paths: Vec<Vec<Coordinate>>,
+    base_paths: Vec<PreviewPath>,
+    selected_paths: Vec<PreviewPath>,
     manual_map: Option<ManualMap>,
     level_label: Option<(Coordinate, String)>,
     next_click: Option<NextClickInfo>,
@@ -17,8 +17,8 @@ pub struct PreviewOverlay {
 
 impl PreviewOverlay {
     pub fn new(
-        base_paths: Vec<Vec<Coordinate>>,
-        selected_paths: Vec<Vec<Coordinate>>,
+        base_paths: Vec<PreviewPath>,
+        selected_paths: Vec<PreviewPath>,
         manual_map: Option<ManualMap>,
         level_label: Option<(Coordinate, String)>,
         next_click: Option<NextClickInfo>,
@@ -50,17 +50,19 @@ impl walkers::Plugin for PreviewOverlay {
         let painter = ui.painter();
         painter.rect_filled(response.rect, 0.0, egui::Color32::from_rgb(8, 11, 14));
 
-        paint_paths(
+        paint_preview_paths(
             painter,
             projector,
             &self.base_paths,
-            egui::Stroke::new(1.4, egui::Color32::from_rgb(95, 116, 132)),
+            1.4,
+            egui::Color32::from_rgb(95, 116, 132),
         );
-        paint_paths(
+        paint_preview_paths(
             painter,
             projector,
             &self.selected_paths,
-            egui::Stroke::new(2.4, egui::Color32::from_rgb(95, 200, 205)),
+            2.4,
+            egui::Color32::from_rgb(95, 200, 205),
         );
 
         let hover_inside = response
@@ -129,14 +131,19 @@ impl walkers::Plugin for PreviewOverlay {
     }
 }
 
-fn paint_paths(
+fn paint_preview_paths(
     painter: &egui::Painter,
     projector: &walkers::Projector,
-    paths: &[Vec<Coordinate>],
-    stroke: egui::Stroke,
+    paths: &[PreviewPath],
+    width: f32,
+    fallback_color: egui::Color32,
 ) {
     for path in paths {
-        paint_line(painter, projector, path, stroke);
+        let color = path
+            .color
+            .map(|[r, g, b]| egui::Color32::from_rgb(r, g, b))
+            .unwrap_or(fallback_color);
+        paint_line(painter, projector, &path.coordinates, egui::Stroke::new(width, color));
     }
 }
 

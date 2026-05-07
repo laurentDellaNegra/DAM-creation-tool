@@ -183,6 +183,9 @@ fn text_number_lat_id() -> egui::Id {
 fn text_number_lon_id() -> egui::Id {
     egui::Id::new("text-number-lon")
 }
+fn text_number_text_id() -> egui::Id {
+    egui::Id::new("text-number-text")
+}
 fn pie_center_lat_id() -> egui::Id {
     egui::Id::new("pie-center-lat")
 }
@@ -541,6 +544,8 @@ impl DamApp {
             self.form.selected_map_id = Some(id);
             if let Some(map) = self.form.selected_map(&self.catalog) {
                 center_map_on_static_map(&mut self.map_memory, map);
+                let defaults = map.defaults.clone();
+                self.form.apply_defaults(&defaults);
             }
         }
 
@@ -949,6 +954,7 @@ impl DamApp {
             manual_map
                 .as_ref()
                 .and_then(|map| map.label_position)
+                .or_else(|| selected_map.and_then(|map| map.defaults.label_coordinate))
                 .or_else(|| {
                     selected_map
                         .and_then(|map| map.preview.bbox)
@@ -1017,6 +1023,10 @@ impl DamApp {
                 None => {
                     self.pending_click_target = None;
                     self.surrender_click_target_focus(ui.ctx(), target);
+                    if target == ClickTarget::TextNumberPoint {
+                        ui.ctx()
+                            .memory_mut(|m| m.request_focus(text_number_text_id()));
+                    }
                 }
             }
         }
@@ -1387,8 +1397,11 @@ fn manual_text_number_ui(ui: &mut egui::Ui, text_number: &mut TextNumberDraftSta
         text_number_lat_id(),
         text_number_lon_id(),
     );
-    ui.label(format!("Text ({} / 25)", text_number.text.chars().count()));
-    ui.add(egui::TextEdit::singleline(&mut text_number.text).desired_width(f32::INFINITY));
+    ui.add(
+        egui::TextEdit::singleline(&mut text_number.text)
+            .id(text_number_text_id())
+            .desired_width(f32::INFINITY),
+    );
 
     ui.label("Color");
     ui.horizontal_wrapped(|ui| {

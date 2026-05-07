@@ -5,8 +5,8 @@ mod model;
 mod validation;
 
 pub use catalog::{
-    CatalogDiagnostic, Coordinate, MapCatalog, PreviewGeometry, StaticMap, bundled_catalog,
-    switzerland_border_preview,
+    CatalogDiagnostic, Coordinate, MapCatalog, MapDefaults, PreviewGeometry, PreviewPath,
+    StaticMap, bundled_catalog, switzerland_border_preview,
 };
 pub use distribution::{
     DistributionSelection, Sector, UnitGroup, default_distribution, unit_groups,
