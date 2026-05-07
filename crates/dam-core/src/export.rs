@@ -1,4 +1,7 @@
-use crate::{DamCreation, LevelUnit, ValidationError, validate_creation};
+use crate::{
+    DamCreation, DamMap, LevelUnit, ManualGeometry, ManualMap, ManualMapAttributes,
+    ValidationError, validate_creation,
+};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -23,6 +26,7 @@ pub struct DamExport {
     pub map: ExportMap,
     pub date_range: ExportDateRange,
     pub periods: Vec<ExportPeriod>,
+    pub display_levels: bool,
     pub altitude_correction: &'static str,
     pub upper_buffer: &'static str,
     pub lower_buffer: &'static str,
@@ -34,11 +38,8 @@ impl DamExport {
     pub fn from_creation(creation: &DamCreation) -> Self {
         Self {
             version: 1,
-            kind: "static_map_creation",
-            map: ExportMap {
-                id: creation.map.id.clone(),
-                name: creation.map.name.clone(),
-            },
+            kind: "dam_creation",
+            map: ExportMap::from(&creation.map),
             date_range: ExportDateRange {
                 start_date: creation.date_range.start.format("%Y-%m-%d").to_string(),
                 end_date: creation.date_range.end.format("%Y-%m-%d").to_string(),
@@ -61,6 +62,7 @@ impl DamExport {
                     upper: ExportLevel::from(period.upper),
                 })
                 .collect(),
+            display_levels: creation.display_levels,
             altitude_correction: match creation.altitude_correction {
                 crate::AltitudeCorrection::None => "none",
                 crate::AltitudeCorrection::QnhCorr => "qnh_corr",
@@ -88,9 +90,115 @@ impl DamExport {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct ExportMap {
-    pub id: String,
-    pub name: String,
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ExportMap {
+    Predefined {
+        id: String,
+        name: String,
+    },
+    Manual {
+        name: String,
+        geometry: ExportManualGeometry,
+        attributes: ManualMapAttributes,
+        label_position: crate::Coordinate,
+    },
+}
+
+impl From<&DamMap> for ExportMap {
+    fn from(map: &DamMap) -> Self {
+        match map {
+            DamMap::Predefined(selected) => Self::Predefined {
+                id: selected.id.clone(),
+                name: selected.name.clone(),
+            },
+            DamMap::Manual(manual) => Self::from(manual),
+        }
+    }
+}
+
+impl From<&ManualMap> for ExportMap {
+    fn from(manual: &ManualMap) -> Self {
+        Self::Manual {
+            name: manual.name.clone(),
+            geometry: ExportManualGeometry::from(&manual.geometry),
+            attributes: manual.attributes.clone(),
+            label_position: manual
+                .label_position
+                .expect("manual maps are validated before export"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ExportManualGeometry {
+    Polygon {
+        points: Vec<crate::Coordinate>,
+    },
+    ParaSymbol {
+        point: crate::Coordinate,
+    },
+    TextNumber {
+        point: crate::Coordinate,
+        text: String,
+        color: crate::TextNumberColor,
+        size: crate::TextNumberSize,
+    },
+    PieCircle {
+        center: crate::Coordinate,
+        radius_nm: f64,
+        first_angle_deg: f64,
+        last_angle_deg: f64,
+    },
+    Strip {
+        point1: crate::Coordinate,
+        point2: crate::Coordinate,
+        width_nm: f64,
+    },
+}
+
+impl From<&ManualGeometry> for ExportManualGeometry {
+    fn from(geometry: &ManualGeometry) -> Self {
+        match geometry {
+            ManualGeometry::Polygon { points } => Self::Polygon {
+                points: points.clone(),
+            },
+            ManualGeometry::ParaSymbol { point } => Self::ParaSymbol {
+                point: point.expect("manual maps are validated before export"),
+            },
+            ManualGeometry::TextNumber {
+                point,
+                text,
+                color,
+                size,
+            } => Self::TextNumber {
+                point: point.expect("manual maps are validated before export"),
+                text: text.clone(),
+                color: *color,
+                size: *size,
+            },
+            ManualGeometry::PieCircle {
+                center,
+                radius_nm,
+                first_angle_deg,
+                last_angle_deg,
+            } => Self::PieCircle {
+                center: center.expect("manual maps are validated before export"),
+                radius_nm: radius_nm.expect("manual maps are validated before export"),
+                first_angle_deg: *first_angle_deg,
+                last_angle_deg: *last_angle_deg,
+            },
+            ManualGeometry::Strip {
+                point1,
+                point2,
+                width_nm,
+            } => Self::Strip {
+                point1: point1.expect("manual maps are validated before export"),
+                point2: point2.expect("manual maps are validated before export"),
+                width_nm: width_nm.expect("manual maps are validated before export"),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -143,19 +251,15 @@ pub struct ExportText {
 mod tests {
     use super::*;
     use crate::{
-        AltitudeCorrection, BufferFilter, DateRange, DistributionSelection, Level, LevelUnit,
-        Period, SelectedStaticMap, TextInfo,
+        AltitudeCorrection, BufferFilter, Coordinate, DateRange, DistributionSelection, Level,
+        LevelUnit, ManualMapCategory, ManualMapRendering, Period, SelectedStaticMap, TextInfo,
     };
     use chrono::{NaiveDate, NaiveTime};
     use std::collections::BTreeSet;
 
-    #[test]
-    fn exports_stable_pretty_json_with_map_id_and_name_only() {
-        let creation = DamCreation {
-            map: SelectedStaticMap {
-                id: "50714".to_owned(),
-                name: "HAUT VALAIS".to_owned(),
-            },
+    fn valid_creation(map: DamMap) -> DamCreation {
+        DamCreation {
+            map,
             date_range: DateRange {
                 start: NaiveDate::from_ymd_opt(2026, 5, 7).unwrap(),
                 end: NaiveDate::from_ymd_opt(2026, 5, 8).unwrap(),
@@ -169,6 +273,7 @@ mod tests {
                 lower: Level::new(85, LevelUnit::FlightLevel),
                 upper: Level::new(9_500, LevelUnit::Feet),
             }],
+            display_levels: true,
             altitude_correction: AltitudeCorrection::QnhCorr,
             upper_buffer: BufferFilter::Half,
             lower_buffer: BufferFilter::NoBuffer,
@@ -179,14 +284,65 @@ mod tests {
                 value: "comment".to_owned(),
                 display: true,
             },
-        };
+        }
+    }
+
+    #[test]
+    fn exports_stable_pretty_json_with_tagged_predefined_map() {
+        let creation = valid_creation(DamMap::Predefined(SelectedStaticMap {
+            id: "50714".to_owned(),
+            name: "HAUT VALAIS".to_owned(),
+        }));
 
         let json = to_pretty_json(&creation).unwrap();
 
+        assert!(json.contains(r#""kind": "predefined""#));
         assert!(json.contains(r#""id": "50714""#));
         assert!(json.contains(r#""name": "HAUT VALAIS""#));
         assert!(!json.contains("geojson"));
         assert!(json.contains(r#""unit": "FL""#));
         assert!(json.contains(r#""unit": "ft""#));
+    }
+
+    #[test]
+    fn exports_manual_geometry_and_attributes_deterministically() {
+        let creation = valid_creation(DamMap::Manual(ManualMap {
+            name: "Manual polygon".to_owned(),
+            geometry: ManualGeometry::Polygon {
+                points: vec![
+                    Coordinate {
+                        lon: 7.0,
+                        lat: 46.0,
+                    },
+                    Coordinate {
+                        lon: 7.2,
+                        lat: 46.0,
+                    },
+                    Coordinate {
+                        lon: 7.2,
+                        lat: 46.2,
+                    },
+                ],
+            },
+            attributes: ManualMapAttributes {
+                category: ManualMapCategory::Restricted,
+                rendering: ManualMapRendering::Line,
+                lateral_buffer_nm: 2.5,
+            },
+            label_position: Some(Coordinate {
+                lon: 7.2,
+                lat: 46.2,
+            }),
+        }));
+
+        let json = to_pretty_json(&creation).unwrap();
+
+        assert!(json.contains(r#""kind": "manual""#));
+        assert!(json.contains(r#""name": "Manual polygon""#));
+        assert!(json.contains(r#""kind": "polygon""#));
+        assert!(json.contains(r#""category": "restricted""#));
+        assert!(json.contains(r#""rendering": "line""#));
+        assert!(json.contains(r#""lateral_buffer_nm": 2.5"#));
+        assert!(json.contains(r#""display_levels": true"#));
     }
 }

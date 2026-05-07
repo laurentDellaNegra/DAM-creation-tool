@@ -2,13 +2,18 @@ mod form;
 mod platform;
 mod preview;
 
-use crate::form::{DamFormState, LevelFieldState, PeriodRowState};
+use crate::form::{
+    CoordinateFieldState, DamFormState, LevelFieldState, ManualGeometryType, MapMode,
+    PeriodRowState, PieCircleDraftState, PieClickTarget, PolygonDraftState, StripClickTarget,
+    StripDraftState, TextNumberDraftState,
+};
 use crate::preview::PreviewOverlay;
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime};
 use dam_core::{
-    AltitudeCorrection, BufferFilter, CatalogDiagnostic, DamCreation, MapCatalog, PreviewGeometry,
-    StaticMap, ValidationIssue, Weekday, bundled_catalog, switzerland_border_preview,
-    to_pretty_json, unit_groups,
+    AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, DamCreation, MAX_PERIODS,
+    MAX_POLYGON_POINTS, ManualMapCategory, ManualMapRendering, MapCatalog, PreviewGeometry,
+    StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday, bundled_catalog,
+    switzerland_border_preview, to_pretty_json, unit_groups,
 };
 
 const APP_BG: egui::Color32 = egui::Color32::from_rgb(11, 15, 19);
@@ -144,7 +149,7 @@ impl DamApp {
         ui.horizontal(|ui| {
             ui.heading("DAM Creation Tool");
             ui.separator();
-            ui.label("Static map creation");
+            ui.label("Map creation");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Send").clicked() {
                     self.export();
@@ -233,6 +238,30 @@ impl DamApp {
     }
 
     fn map_section(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            selectable_enum(
+                ui,
+                &mut self.form.map_mode,
+                MapMode::Predefined,
+                MapMode::Predefined.label(),
+            );
+            selectable_enum(
+                ui,
+                &mut self.form.map_mode,
+                MapMode::Manual,
+                MapMode::Manual.label(),
+            );
+        });
+
+        ui.add_space(8.0);
+
+        match self.form.map_mode {
+            MapMode::Predefined => self.predefined_map_section(ui),
+            MapMode::Manual => self.manual_map_section(ui),
+        }
+    }
+
+    fn predefined_map_section(&mut self, ui: &mut egui::Ui) {
         if self.catalog.maps.is_empty() {
             ui.colored_label(
                 egui::Color32::LIGHT_RED,
@@ -316,6 +345,76 @@ impl DamApp {
         ui.add_space(6.0);
         ui.strong("Selected DAM map");
         self.selected_map_summary(ui);
+    }
+
+    fn manual_map_section(&mut self, ui: &mut egui::Ui) {
+        ui.label("Map name");
+        ui.add(egui::TextEdit::singleline(&mut self.form.manual.name).desired_width(f32::INFINITY));
+
+        ui.add_space(8.0);
+        ui.label("Geometry type");
+        ui.horizontal_wrapped(|ui| {
+            for geometry_type in ManualGeometryType::ALL {
+                selectable_enum(
+                    ui,
+                    &mut self.form.manual.geometry_type,
+                    geometry_type,
+                    geometry_type.label(),
+                );
+            }
+        });
+
+        ui.add_space(8.0);
+        Self::inset_panel(ui, |ui| match self.form.manual.geometry_type {
+            ManualGeometryType::Polygon => manual_polygon_ui(ui, &mut self.form.manual.polygon),
+            ManualGeometryType::ParaSymbol => {
+                ui.strong("Para symbol point");
+                coordinate_field_ui(ui, "Position", &mut self.form.manual.para_symbol.point);
+            }
+            ManualGeometryType::TextNumber => {
+                manual_text_number_ui(ui, &mut self.form.manual.text_number);
+            }
+            ManualGeometryType::PieCircle => {
+                manual_pie_circle_ui(ui, &mut self.form.manual.pie_circle);
+            }
+            ManualGeometryType::Strip => {
+                manual_strip_ui(ui, &mut self.form.manual.strip);
+            }
+        });
+
+        ui.add_space(8.0);
+        ui.strong("Map attributes");
+        Self::inset_panel(ui, |ui| {
+            ui.label("Map category");
+            ui.horizontal_wrapped(|ui| {
+                for category in ManualMapCategory::ALL {
+                    selectable_enum(
+                        ui,
+                        &mut self.form.manual.attributes.category,
+                        category,
+                        category.label(),
+                    );
+                }
+            });
+
+            ui.label("Rendering");
+            ui.horizontal(|ui| {
+                for rendering in ManualMapRendering::ALL {
+                    selectable_enum(
+                        ui,
+                        &mut self.form.manual.attributes.rendering,
+                        rendering,
+                        rendering.label(),
+                    );
+                }
+            });
+
+            ui.label("Lateral buffer (NM)");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.form.manual.attributes.lateral_buffer_nm)
+                    .desired_width(96.0),
+            );
+        });
     }
 
     fn date_section(&mut self, ui: &mut egui::Ui) {
@@ -405,6 +504,12 @@ impl DamApp {
     }
 
     fn periods_section(&mut self, ui: &mut egui::Ui) {
+        ui.checkbox(&mut self.form.display_levels, "Display levels");
+        ui.label(format!(
+            "{} / {MAX_PERIODS} activation period(s)",
+            self.form.periods.len()
+        ));
+
         let mut remove_index = None;
         let mut add_after = None;
 
@@ -419,7 +524,14 @@ impl DamApp {
                         self.selected_period = index;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add_sized([28.0, 28.0], egui::Button::new("+")).clicked() {
+                        let add_enabled = self.form.periods.len() < MAX_PERIODS;
+                        if ui
+                            .add_enabled(
+                                add_enabled,
+                                egui::Button::new("+").min_size([28.0, 28.0].into()),
+                            )
+                            .clicked()
+                        {
                             add_after = Some(index);
                         }
                         let mut remove_clicked = false;
@@ -576,12 +688,29 @@ impl DamApp {
 
     fn preview_panel(&mut self, ui: &mut egui::Ui) {
         ui.heading("Map Preview");
-        let selected_map = self.form.selected_map(&self.catalog);
+        let selected_map = if self.form.map_mode == MapMode::Predefined {
+            self.form.selected_map(&self.catalog)
+        } else {
+            None
+        };
+        let manual_map = if self.form.map_mode == MapMode::Manual {
+            Some(self.form.manual.preview_manual_map())
+        } else {
+            None
+        };
+
         if let Some(map) = selected_map {
             ui.strong(map.label());
             if let Some(description) = &map.description {
                 ui.label(description);
             }
+        } else if let Some(manual_map) = &manual_map {
+            ui.strong(if manual_map.name.trim().is_empty() {
+                "Manual DAM map"
+            } else {
+                manual_map.name.as_str()
+            });
+            ui.label("Click the preview to edit the active manual geometry.");
         } else {
             ui.strong("Switzerland country border");
             ui.label("No DAM map selected.");
@@ -596,13 +725,67 @@ impl DamApp {
             .map(|bbox| bbox.center())
             .map(|center| walkers::lon_lat(center.lon, center.lat))
             .unwrap_or_else(|| walkers::lon_lat(8.22, 46.8));
+        let level_label = if self.form.display_levels {
+            let label_text = self.current_level_label();
+            manual_map
+                .as_ref()
+                .and_then(|map| map.label_position)
+                .or_else(|| {
+                    selected_map
+                        .and_then(|map| map.preview.bbox)
+                        .map(|bbox| bbox.center())
+                })
+                .map(|coordinate| (coordinate, label_text))
+        } else {
+            None
+        };
 
-        let overlay = PreviewOverlay::new(self.default_preview.paths.clone(), selected_paths);
+        let overlay = PreviewOverlay::new(
+            self.default_preview.paths.clone(),
+            selected_paths,
+            manual_map,
+            level_label,
+        );
+        let mut clicked_coordinate = None;
+        let manual_mode = self.form.map_mode == MapMode::Manual;
         walkers::Map::new(None, &mut self.map_memory, center)
             .zoom_with_ctrl(false)
             .double_click_to_zoom(true)
             .with_plugin(overlay)
-            .show(ui, |_ui, _response, _projector, _memory| {});
+            .show(ui, |_ui, response, projector, _memory| {
+                if manual_mode
+                    && response.clicked_by(egui::PointerButton::Primary)
+                    && let Some(pointer_position) = response.interact_pointer_pos()
+                {
+                    let position = projector.unproject(pointer_position.to_vec2());
+                    clicked_coordinate = Some(Coordinate {
+                        lon: position.x(),
+                        lat: position.y(),
+                    });
+                }
+            });
+
+        if let Some(coordinate) = clicked_coordinate
+            && !self.form.manual.apply_click(coordinate)
+        {
+            self.status = Some(format!(
+                "Polygon point limit reached ({MAX_POLYGON_POINTS} points)."
+            ));
+        }
+    }
+
+    fn current_level_label(&self) -> String {
+        self.form
+            .periods
+            .get(self.selected_period)
+            .map(|period| {
+                format!(
+                    "{}/{}",
+                    period.lower.value.trim(),
+                    period.upper.value.trim()
+                )
+            })
+            .unwrap_or_else(|| "000/999".to_owned())
     }
 
     fn date_picker_window(&mut self, ctx: &egui::Context) {
@@ -815,6 +998,144 @@ fn level_field_ui(ui: &mut egui::Ui, label: &str, level: &mut LevelFieldState) {
             if locked {
                 ui.label("4+ digits -> ft");
             }
+        });
+    });
+}
+
+fn manual_polygon_ui(ui: &mut egui::Ui, polygon: &mut PolygonDraftState) {
+    ui.horizontal(|ui| {
+        ui.strong(format!(
+            "Point list ({} / {MAX_POLYGON_POINTS})",
+            polygon.points.len()
+        ));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.add_enabled(false, egui::Button::new("Add Arc"))
+                .on_disabled_hover_text("Arc rows are deferred.");
+            let add_enabled = polygon.points.len() < MAX_POLYGON_POINTS;
+            if ui
+                .add_enabled(add_enabled, egui::Button::new("Add Point"))
+                .clicked()
+            {
+                polygon.points.push(CoordinateFieldState::default());
+            }
+        });
+    });
+
+    if polygon.points.is_empty() {
+        ui.colored_label(
+            egui::Color32::LIGHT_YELLOW,
+            "Click the preview or add point rows.",
+        );
+    }
+
+    let mut remove_index = None;
+    let mut insert_after = None;
+    for index in 0..polygon.points.len() {
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.strong(format!("Point {}", index + 1));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("Remove").clicked() {
+                    remove_index = Some(index);
+                }
+                let insert_enabled = polygon.points.len() < MAX_POLYGON_POINTS;
+                if ui
+                    .add_enabled(insert_enabled, egui::Button::new("Insert after"))
+                    .clicked()
+                {
+                    insert_after = Some(index);
+                }
+                ui.add_enabled(false, egui::Button::new("Insert Arc"))
+                    .on_disabled_hover_text("Arc rows are deferred.");
+            });
+        });
+        coordinate_field_ui(ui, "", &mut polygon.points[index]);
+    }
+
+    if let Some(index) = insert_after {
+        polygon
+            .points
+            .insert(index + 1, CoordinateFieldState::default());
+    }
+    if let Some(index) = remove_index {
+        polygon.points.remove(index);
+    }
+}
+
+fn manual_text_number_ui(ui: &mut egui::Ui, text_number: &mut TextNumberDraftState) {
+    ui.strong("Text and number point");
+    coordinate_field_ui(ui, "Position", &mut text_number.point);
+    ui.label(format!("Text ({} / 25)", text_number.text.chars().count()));
+    ui.add(egui::TextEdit::singleline(&mut text_number.text).desired_width(f32::INFINITY));
+
+    ui.label("Color");
+    ui.horizontal_wrapped(|ui| {
+        for color in TextNumberColor::ALL {
+            selectable_enum(ui, &mut text_number.color, color, color.label());
+        }
+    });
+
+    ui.label("Size");
+    ui.horizontal(|ui| {
+        for size in TextNumberSize::ALL {
+            selectable_enum(ui, &mut text_number.size, size, size.label());
+        }
+    });
+}
+
+fn manual_pie_circle_ui(ui: &mut egui::Ui, pie: &mut PieCircleDraftState) {
+    ui.strong("Pie / circle");
+    coordinate_field_ui(ui, "Center", &mut pie.center);
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            ui.label("Radius (NM)");
+            ui.add(egui::TextEdit::singleline(&mut pie.radius_nm).desired_width(96.0));
+        });
+        ui.vertical(|ui| {
+            ui.label("First angle");
+            ui.add(egui::TextEdit::singleline(&mut pie.first_angle_deg).desired_width(78.0));
+        });
+        ui.vertical(|ui| {
+            ui.label("Last angle");
+            ui.add(egui::TextEdit::singleline(&mut pie.last_angle_deg).desired_width(78.0));
+        });
+    });
+
+    ui.label("Preview click target");
+    ui.horizontal(|ui| {
+        for target in [PieClickTarget::Center, PieClickTarget::Radius] {
+            selectable_enum(ui, &mut pie.click_target, target, target.label());
+        }
+    });
+}
+
+fn manual_strip_ui(ui: &mut egui::Ui, strip: &mut StripDraftState) {
+    ui.strong("Strip corridor");
+    coordinate_field_ui(ui, "Point 1", &mut strip.point1);
+    coordinate_field_ui(ui, "Point 2", &mut strip.point2);
+    ui.label("Width (NM)");
+    ui.add(egui::TextEdit::singleline(&mut strip.width_nm).desired_width(96.0));
+
+    ui.label("Preview click target");
+    ui.horizontal(|ui| {
+        for target in [StripClickTarget::Point1, StripClickTarget::Point2] {
+            selectable_enum(ui, &mut strip.click_target, target, target.label());
+        }
+    });
+}
+
+fn coordinate_field_ui(ui: &mut egui::Ui, label: &str, coordinate: &mut CoordinateFieldState) {
+    if !label.is_empty() {
+        ui.label(label);
+    }
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            ui.label("Latitude");
+            ui.add(egui::TextEdit::singleline(&mut coordinate.lat).desired_width(104.0));
+        });
+        ui.vertical(|ui| {
+            ui.label("Longitude");
+            ui.add(egui::TextEdit::singleline(&mut coordinate.lon).desired_width(104.0));
         });
     });
 }

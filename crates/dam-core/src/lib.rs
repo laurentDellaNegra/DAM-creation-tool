@@ -13,7 +13,9 @@ pub use distribution::{
 };
 pub use export::{DamExport, ExportError, to_pretty_json};
 pub use model::{
-    AltitudeCorrection, BufferFilter, DamCreation, DateRange, Level, LevelUnit, Period,
-    SelectedStaticMap, TextInfo, Weekday,
+    AltitudeCorrection, BufferFilter, DamCreation, DamMap, DateRange, Level, LevelUnit,
+    MAX_PERIODS, MAX_POLYGON_POINTS, ManualGeometry, ManualMap, ManualMapAttributes,
+    ManualMapCategory, ManualMapRendering, Period, SelectedStaticMap, TextInfo, TextNumberColor,
+    TextNumberSize, Weekday,
 };
 pub use validation::{ValidationError, ValidationIssue, validate_creation};

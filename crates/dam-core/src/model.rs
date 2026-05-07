@@ -3,11 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DamCreation {
-    pub map: SelectedStaticMap,
+    pub map: DamMap,
     pub date_range: DateRange,
     pub periods: Vec<Period>,
+    pub display_levels: bool,
     pub altitude_correction: AltitudeCorrection,
     pub upper_buffer: BufferFilter,
     pub lower_buffer: BufferFilter,
@@ -15,10 +16,185 @@ pub struct DamCreation {
     pub text: TextInfo,
 }
 
+pub const MAX_PERIODS: usize = 16;
+pub const MAX_POLYGON_POINTS: usize = 10;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DamMap {
+    Predefined(SelectedStaticMap),
+    Manual(ManualMap),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SelectedStaticMap {
     pub id: String,
     pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ManualMap {
+    pub name: String,
+    pub geometry: ManualGeometry,
+    pub attributes: ManualMapAttributes,
+    pub label_position: Option<crate::Coordinate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ManualGeometry {
+    Polygon {
+        points: Vec<crate::Coordinate>,
+    },
+    ParaSymbol {
+        point: Option<crate::Coordinate>,
+    },
+    TextNumber {
+        point: Option<crate::Coordinate>,
+        text: String,
+        color: TextNumberColor,
+        size: TextNumberSize,
+    },
+    PieCircle {
+        center: Option<crate::Coordinate>,
+        radius_nm: Option<f64>,
+        first_angle_deg: f64,
+        last_angle_deg: f64,
+    },
+    Strip {
+        point1: Option<crate::Coordinate>,
+        point2: Option<crate::Coordinate>,
+        width_nm: Option<f64>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ManualMapAttributes {
+    pub category: ManualMapCategory,
+    pub rendering: ManualMapRendering,
+    pub lateral_buffer_nm: f64,
+}
+
+impl Default for ManualMapAttributes {
+    fn default() -> Self {
+        Self {
+            category: ManualMapCategory::Danger,
+            rendering: ManualMapRendering::Surface,
+            lateral_buffer_nm: 0.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManualMapCategory {
+    Danger,
+    Restricted,
+    Glider,
+    Ctr,
+    Cfz,
+    Tma,
+    Para,
+    Other,
+}
+
+impl ManualMapCategory {
+    pub const ALL: [ManualMapCategory; 8] = [
+        ManualMapCategory::Danger,
+        ManualMapCategory::Restricted,
+        ManualMapCategory::Glider,
+        ManualMapCategory::Ctr,
+        ManualMapCategory::Cfz,
+        ManualMapCategory::Tma,
+        ManualMapCategory::Para,
+        ManualMapCategory::Other,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ManualMapCategory::Danger => "Danger",
+            ManualMapCategory::Restricted => "Restricted",
+            ManualMapCategory::Glider => "Glider",
+            ManualMapCategory::Ctr => "CTR",
+            ManualMapCategory::Cfz => "CFZ",
+            ManualMapCategory::Tma => "TMA",
+            ManualMapCategory::Para => "Para",
+            ManualMapCategory::Other => "Other",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManualMapRendering {
+    Surface,
+    Line,
+}
+
+impl ManualMapRendering {
+    pub const ALL: [ManualMapRendering; 2] =
+        [ManualMapRendering::Surface, ManualMapRendering::Line];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ManualMapRendering::Surface => "Surface",
+            ManualMapRendering::Line => "Line",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextNumberColor {
+    Red,
+    Green,
+    Blue,
+    Yellow,
+    White,
+}
+
+impl TextNumberColor {
+    pub const ALL: [TextNumberColor; 5] = [
+        TextNumberColor::Red,
+        TextNumberColor::Green,
+        TextNumberColor::Blue,
+        TextNumberColor::Yellow,
+        TextNumberColor::White,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TextNumberColor::Red => "Red",
+            TextNumberColor::Green => "Green",
+            TextNumberColor::Blue => "Blue",
+            TextNumberColor::Yellow => "Yellow",
+            TextNumberColor::White => "White",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextNumberSize {
+    Small,
+    Medium,
+    Large,
+}
+
+impl TextNumberSize {
+    pub const ALL: [TextNumberSize; 3] = [
+        TextNumberSize::Small,
+        TextNumberSize::Medium,
+        TextNumberSize::Large,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TextNumberSize::Small => "Small",
+            TextNumberSize::Medium => "Medium",
+            TextNumberSize::Large => "Large",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,47 +339,28 @@ impl LevelUnit {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AltitudeCorrection {
+    #[default]
     None,
     QnhCorr,
     FlCorr,
 }
 
-impl Default for AltitudeCorrection {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BufferFilter {
+    #[default]
     Default,
     Half,
     NoBuffer,
 }
 
-impl Default for BufferFilter {
-    fn default() -> Self {
-        Self::Default
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextInfo {
     pub value: String,
     pub display: bool,
-}
-
-impl Default for TextInfo {
-    fn default() -> Self {
-        Self {
-            value: String::new(),
-            display: false,
-        }
-    }
 }
 
 pub fn possible_weekdays(start: NaiveDate, end: NaiveDate) -> BTreeSet<Weekday> {

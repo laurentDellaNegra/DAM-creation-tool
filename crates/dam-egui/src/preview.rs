@@ -1,15 +1,27 @@
-use dam_core::Coordinate;
+use dam_core::{
+    Coordinate, ManualGeometry, ManualMap, ManualMapAttributes, ManualMapCategory,
+    ManualMapRendering, TextNumberColor, TextNumberSize,
+};
 
 pub struct PreviewOverlay {
     base_paths: Vec<Vec<Coordinate>>,
     selected_paths: Vec<Vec<Coordinate>>,
+    manual_map: Option<ManualMap>,
+    level_label: Option<(Coordinate, String)>,
 }
 
 impl PreviewOverlay {
-    pub fn new(base_paths: Vec<Vec<Coordinate>>, selected_paths: Vec<Vec<Coordinate>>) -> Self {
+    pub fn new(
+        base_paths: Vec<Vec<Coordinate>>,
+        selected_paths: Vec<Vec<Coordinate>>,
+        manual_map: Option<ManualMap>,
+        level_label: Option<(Coordinate, String)>,
+    ) -> Self {
         Self {
             base_paths,
             selected_paths,
+            manual_map,
+            level_label,
         }
     }
 }
@@ -37,6 +49,14 @@ impl walkers::Plugin for PreviewOverlay {
             &self.selected_paths,
             egui::Stroke::new(2.4, egui::Color32::from_rgb(95, 200, 205)),
         );
+
+        if let Some(manual_map) = &self.manual_map {
+            paint_manual_map(painter, projector, manual_map);
+        }
+
+        if let Some((position, label)) = &self.level_label {
+            paint_level_label(painter, projector, *position, label);
+        }
     }
 }
 
@@ -47,16 +67,335 @@ fn paint_paths(
     stroke: egui::Stroke,
 ) {
     for path in paths {
-        let points: Vec<egui::Pos2> = path
-            .iter()
-            .map(|coordinate| {
-                let projected = projector.project(walkers::lon_lat(coordinate.lon, coordinate.lat));
-                egui::pos2(projected.x, projected.y)
-            })
-            .collect();
+        paint_line(painter, projector, path, stroke);
+    }
+}
 
-        if points.len() >= 2 {
-            painter.add(egui::Shape::line(points, stroke));
+fn paint_manual_map(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    manual_map: &ManualMap,
+) {
+    let color = category_color(manual_map.attributes.category);
+    match &manual_map.geometry {
+        ManualGeometry::Polygon { points } => {
+            paint_surface_or_line(painter, projector, points, &manual_map.attributes, true);
+            paint_points(painter, projector, points, color);
         }
+        ManualGeometry::ParaSymbol { point } => {
+            if let Some(point) = point {
+                paint_para_symbol(painter, projector, *point, color);
+            }
+        }
+        ManualGeometry::TextNumber {
+            point,
+            text,
+            color,
+            size,
+        } => {
+            if let Some(point) = point {
+                paint_text_number(painter, projector, *point, text, *color, *size);
+            }
+        }
+        ManualGeometry::PieCircle {
+            center,
+            radius_nm,
+            first_angle_deg,
+            last_angle_deg,
+        } => {
+            if let Some(center) = center {
+                paint_point(painter, projector, *center, color);
+                if let Some(radius_nm) = radius_nm {
+                    let shape =
+                        pie_circle_points(*center, *radius_nm, *first_angle_deg, *last_angle_deg);
+                    paint_surface_or_line(
+                        painter,
+                        projector,
+                        &shape,
+                        &manual_map.attributes,
+                        is_full_circle(*first_angle_deg, *last_angle_deg),
+                    );
+                }
+            }
+        }
+        ManualGeometry::Strip {
+            point1,
+            point2,
+            width_nm,
+        } => {
+            if let Some(point1) = point1 {
+                paint_point(painter, projector, *point1, color);
+            }
+            if let Some(point2) = point2 {
+                paint_point(painter, projector, *point2, color);
+            }
+            if let (Some(point1), Some(point2), Some(width_nm)) = (point1, point2, width_nm) {
+                let polygon = strip_points(*point1, *point2, *width_nm);
+                paint_surface_or_line(painter, projector, &polygon, &manual_map.attributes, true);
+            } else if let (Some(point1), Some(point2)) = (point1, point2) {
+                paint_line(
+                    painter,
+                    projector,
+                    &[*point1, *point2],
+                    egui::Stroke::new(2.0, color),
+                );
+            }
+        }
+    }
+}
+
+fn paint_surface_or_line(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    coordinates: &[Coordinate],
+    attributes: &ManualMapAttributes,
+    close: bool,
+) {
+    let color = category_color(attributes.category);
+    let mut points = projected_points(projector, coordinates);
+    if close && points.len() >= 2 {
+        points.push(points[0]);
+    }
+
+    if attributes.rendering == ManualMapRendering::Surface && points.len() >= 3 {
+        painter.add(egui::Shape::convex_polygon(
+            points.clone(),
+            color.linear_multiply(0.22),
+            egui::Stroke::new(1.8, color),
+        ));
+    }
+
+    if points.len() >= 2 {
+        if attributes.lateral_buffer_nm > 0.0 {
+            let width = buffer_width_px(projector, coordinates[0], attributes.lateral_buffer_nm);
+            painter.add(egui::Shape::line(
+                points.clone(),
+                egui::Stroke::new(width, color.linear_multiply(0.16)),
+            ));
+        }
+        painter.add(egui::Shape::line(points, egui::Stroke::new(2.2, color)));
+    } else if let Some(point) = coordinates.first() {
+        paint_point(painter, projector, *point, color);
+    }
+}
+
+fn paint_line(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    path: &[Coordinate],
+    stroke: egui::Stroke,
+) {
+    let points = projected_points(projector, path);
+    if points.len() >= 2 {
+        painter.add(egui::Shape::line(points, stroke));
+    }
+}
+
+fn paint_points(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    points: &[Coordinate],
+    color: egui::Color32,
+) {
+    for point in points {
+        paint_point(painter, projector, *point, color);
+    }
+}
+
+fn paint_point(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    coordinate: Coordinate,
+    color: egui::Color32,
+) {
+    let position = project(projector, coordinate);
+    painter.circle_filled(position, 4.0, color);
+    painter.circle_stroke(position, 5.5, egui::Stroke::new(1.2, egui::Color32::BLACK));
+}
+
+fn paint_para_symbol(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    coordinate: Coordinate,
+    color: egui::Color32,
+) {
+    let center = project(projector, coordinate);
+    painter.circle_filled(center, 4.0, color);
+    painter.circle_stroke(center, 12.0, egui::Stroke::new(2.0, color));
+    painter.line_segment(
+        [center + egui::vec2(-10.0, -3.0), center],
+        egui::Stroke::new(1.4, color),
+    );
+    painter.line_segment(
+        [center + egui::vec2(10.0, -3.0), center],
+        egui::Stroke::new(1.4, color),
+    );
+}
+
+fn paint_text_number(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    coordinate: Coordinate,
+    text: &str,
+    color: TextNumberColor,
+    size: TextNumberSize,
+) {
+    let position = project(projector, coordinate);
+    paint_point(painter, projector, coordinate, text_color(color));
+    painter.text(
+        position + egui::vec2(8.0, -8.0),
+        egui::Align2::LEFT_BOTTOM,
+        text,
+        egui::FontId::proportional(text_size(size)),
+        text_color(color),
+    );
+}
+
+fn paint_level_label(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    coordinate: Coordinate,
+    label: &str,
+) {
+    let position = project(projector, coordinate) + egui::vec2(10.0, 10.0);
+    let galley = painter.layout_no_wrap(
+        label.to_owned(),
+        egui::FontId::monospace(13.0),
+        egui::Color32::WHITE,
+    );
+    let rect = egui::Rect::from_min_size(position, galley.size() + egui::vec2(10.0, 6.0));
+    painter.rect_filled(rect, 3.0, egui::Color32::from_black_alpha(190));
+    painter.rect_stroke(
+        rect,
+        3.0,
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(190, 210, 220)),
+        egui::StrokeKind::Outside,
+    );
+    painter.galley(
+        position + egui::vec2(5.0, 3.0),
+        galley,
+        egui::Color32::WHITE,
+    );
+}
+
+fn projected_points(projector: &walkers::Projector, path: &[Coordinate]) -> Vec<egui::Pos2> {
+    path.iter()
+        .map(|coordinate| project(projector, *coordinate))
+        .collect()
+}
+
+fn project(projector: &walkers::Projector, coordinate: Coordinate) -> egui::Pos2 {
+    let projected = projector.project(walkers::lon_lat(coordinate.lon, coordinate.lat));
+    egui::pos2(projected.x, projected.y)
+}
+
+fn category_color(category: ManualMapCategory) -> egui::Color32 {
+    match category {
+        ManualMapCategory::Danger | ManualMapCategory::Restricted => {
+            egui::Color32::from_rgb(235, 87, 87)
+        }
+        ManualMapCategory::Glider => egui::Color32::from_rgb(76, 175, 118),
+        ManualMapCategory::Ctr | ManualMapCategory::Tma | ManualMapCategory::Para => {
+            egui::Color32::from_rgb(91, 153, 234)
+        }
+        ManualMapCategory::Cfz | ManualMapCategory::Other => egui::Color32::from_rgb(185, 194, 204),
+    }
+}
+
+fn text_color(color: TextNumberColor) -> egui::Color32 {
+    match color {
+        TextNumberColor::Red => egui::Color32::from_rgb(245, 82, 82),
+        TextNumberColor::Green => egui::Color32::from_rgb(86, 196, 118),
+        TextNumberColor::Blue => egui::Color32::from_rgb(92, 160, 255),
+        TextNumberColor::Yellow => egui::Color32::from_rgb(238, 205, 72),
+        TextNumberColor::White => egui::Color32::WHITE,
+    }
+}
+
+fn text_size(size: TextNumberSize) -> f32 {
+    match size {
+        TextNumberSize::Small => 12.0,
+        TextNumberSize::Medium => 16.0,
+        TextNumberSize::Large => 22.0,
+    }
+}
+
+fn buffer_width_px(projector: &walkers::Projector, coordinate: Coordinate, buffer_nm: f64) -> f32 {
+    let meters = buffer_nm * 1852.0;
+    let scale = projector.scale_pixel_per_meter(walkers::lon_lat(coordinate.lon, coordinate.lat));
+    (meters as f32 * scale).clamp(3.0, 48.0)
+}
+
+fn pie_circle_points(
+    center: Coordinate,
+    radius_nm: f64,
+    first_angle_deg: f64,
+    last_angle_deg: f64,
+) -> Vec<Coordinate> {
+    let full_circle = is_full_circle(first_angle_deg, last_angle_deg);
+    let span = angle_span(first_angle_deg, last_angle_deg);
+    let segments = if full_circle { 96 } else { 48 };
+    let mut points = Vec::with_capacity(segments + 2);
+
+    if !full_circle {
+        points.push(center);
+    }
+
+    for index in 0..=segments {
+        let fraction = index as f64 / segments as f64;
+        let angle = first_angle_deg + span * fraction;
+        points.push(destination_point(center, angle, radius_nm));
+    }
+
+    points
+}
+
+fn strip_points(point1: Coordinate, point2: Coordinate, width_nm: f64) -> Vec<Coordinate> {
+    let bearing = bearing_deg(point1, point2);
+    let half_width = width_nm / 2.0;
+    vec![
+        destination_point(point1, bearing - 90.0, half_width),
+        destination_point(point1, bearing + 90.0, half_width),
+        destination_point(point2, bearing + 90.0, half_width),
+        destination_point(point2, bearing - 90.0, half_width),
+    ]
+}
+
+fn is_full_circle(first_angle_deg: f64, last_angle_deg: f64) -> bool {
+    (first_angle_deg - 0.0).abs() < f64::EPSILON && (last_angle_deg - 360.0).abs() < f64::EPSILON
+}
+
+fn angle_span(first_angle_deg: f64, last_angle_deg: f64) -> f64 {
+    if is_full_circle(first_angle_deg, last_angle_deg) {
+        360.0
+    } else if last_angle_deg > first_angle_deg {
+        last_angle_deg - first_angle_deg
+    } else {
+        360.0 - first_angle_deg + last_angle_deg
+    }
+}
+
+fn bearing_deg(from: Coordinate, to: Coordinate) -> f64 {
+    let lat1 = from.lat.to_radians();
+    let lat2 = to.lat.to_radians();
+    let dlon = (to.lon - from.lon).to_radians();
+    let y = dlon.sin() * lat2.cos();
+    let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * dlon.cos();
+    y.atan2(x).to_degrees()
+}
+
+fn destination_point(origin: Coordinate, bearing_deg: f64, distance_nm: f64) -> Coordinate {
+    const EARTH_RADIUS_NM: f64 = 3440.065;
+    let angular = distance_nm / EARTH_RADIUS_NM;
+    let bearing = bearing_deg.to_radians();
+    let lat1 = origin.lat.to_radians();
+    let lon1 = origin.lon.to_radians();
+    let lat2 = (lat1.sin() * angular.cos() + lat1.cos() * angular.sin() * bearing.cos()).asin();
+    let lon2 = lon1
+        + (bearing.sin() * angular.sin() * lat1.cos())
+            .atan2(angular.cos() - lat1.sin() * lat2.sin());
+    Coordinate {
+        lon: lon2.to_degrees(),
+        lat: lat2.to_degrees(),
     }
 }
