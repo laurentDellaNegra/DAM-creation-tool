@@ -16,6 +16,7 @@ pub struct PreviewOverlay {
 }
 
 impl PreviewOverlay {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         base_paths: Vec<PreviewPath>,
         selected_paths: Vec<PreviewPath>,
@@ -80,9 +81,7 @@ impl walkers::Plugin for PreviewOverlay {
             if let (Some(coord), Some((state, target))) = (cursor_coord, &self.cursor_preview) {
                 let map = state.preview_with_cursor(*target, coord);
                 let label = if self.display_levels {
-                    map.label_position
-                        .zip(self.level_label_text.clone())
-                        .map(|(pos, text)| (pos, text))
+                    map.label_position.zip(self.level_label_text.clone())
                 } else {
                     None
                 };
@@ -105,10 +104,10 @@ impl walkers::Plugin for PreviewOverlay {
             let cursor_coord = cursor_coord.expect("hover_inside implies cursor_coord");
 
             if let Some(next_click) = &self.next_click {
-                if let Some(anchor) = next_click.anchor {
-                    if next_click.draw_anchor_line {
-                        paint_preview_line(painter, projector, anchor, hover_pos);
-                    }
+                if let Some(anchor) = next_click.anchor
+                    && next_click.draw_anchor_line
+                {
+                    paint_preview_line(painter, projector, anchor, hover_pos);
                 }
                 if next_click.show_distance {
                     if let Some(anchor) = next_click.anchor {
@@ -143,7 +142,12 @@ fn paint_preview_paths(
             .color
             .map(|[r, g, b]| egui::Color32::from_rgb(r, g, b))
             .unwrap_or(fallback_color);
-        paint_line(painter, projector, &path.coordinates, egui::Stroke::new(width, color));
+        paint_line(
+            painter,
+            projector,
+            &path.coordinates,
+            egui::Stroke::new(width, color),
+        );
     }
 }
 
@@ -492,15 +496,10 @@ fn paint_cursor_readout(painter: &egui::Painter, rect: egui::Rect, coordinate: C
         "Lon {:>10.5}°  Lat {:>9.5}°",
         coordinate.lon, coordinate.lat
     );
-    let galley = painter.layout_no_wrap(
-        label,
-        egui::FontId::monospace(12.0),
-        egui::Color32::WHITE,
-    );
+    let galley = painter.layout_no_wrap(label, egui::FontId::monospace(12.0), egui::Color32::WHITE);
     let padding = egui::vec2(8.0, 4.0);
     let size = galley.size() + padding * 2.0;
-    let position =
-        egui::pos2(rect.right() - size.x - 8.0, rect.bottom() - size.y - 8.0);
+    let position = egui::pos2(rect.right() - size.x - 8.0, rect.bottom() - size.y - 8.0);
     let bg_rect = egui::Rect::from_min_size(position, size);
     painter.rect_filled(bg_rect, 3.0, egui::Color32::from_black_alpha(200));
     painter.rect_stroke(

@@ -1,6 +1,7 @@
 mod form;
 mod platform;
 mod preview;
+mod submission;
 
 use crate::form::{
     ArcDraftState, ClickTarget, CoordinateFieldState, DamFormState, LevelFieldState,
@@ -8,12 +9,13 @@ use crate::form::{
     PolygonNodeDraft, StripDraftState, TextNumberDraftState, geometry_supports_buffer,
 };
 use crate::preview::PreviewOverlay;
+use crate::submission::{SubmissionEndpoint, SubmissionResult, SubmissionStatus, submit_payload};
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime};
 use dam_core::{
-    AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, DamCreation, MAX_PERIODS,
+    AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, MAX_PERIODS,
     MAX_POLYGON_POINTS, ManualMapCategory, ManualMapRendering, MapCatalog, PreviewGeometry,
-    StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday, bundled_catalog,
-    switzerland_border_preview, to_pretty_json, unit_groups,
+    StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday, build_json_payload,
+    bundled_catalog, switzerland_border_preview, unit_groups,
 };
 
 const APP_BG: egui::Color32 = egui::Color32::from_rgb(11, 15, 19);
@@ -34,8 +36,8 @@ pub struct DamApp {
     active_date_picker: Option<DateField>,
     date_picker_month: NaiveDate,
     diagnostics_open: bool,
-    validation_issues: Vec<ValidationIssue>,
-    status: Option<String>,
+    submission_endpoint: Option<SubmissionEndpoint>,
+    submission_status: SubmissionStatus,
     pending_click_target: Option<ClickTarget>,
     previous_active_geometry: Option<ManualGeometryType>,
 }
@@ -87,8 +89,8 @@ impl DamApp {
             active_date_picker: None,
             date_picker_month: first_day_of_month(current_date()),
             diagnostics_open: false,
-            validation_issues: Vec::new(),
-            status: None,
+            submission_endpoint: None,
+            submission_status: SubmissionStatus::Idle,
             pending_click_target: None,
             previous_active_geometry: None,
         }
@@ -357,7 +359,10 @@ impl DamApp {
             ui.label("Map creation");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Send").clicked() {
-                    self.export();
+                    self.send();
+                }
+                if ui.button("Download JSON").clicked() {
+                    self.download_json();
                 }
                 if ui.button("Reset").clicked() {
                     self.show_reset_confirm = true;
@@ -384,7 +389,7 @@ impl DamApp {
                 self.form_section(ui, "Additional Information", |this, ui| {
                     this.text_section(ui);
                 });
-                if self.status.is_some() || !self.validation_issues.is_empty() {
+                if !self.submission_status.is_idle() {
                     self.form_section(ui, "Status", |this, ui| this.validation_section(ui));
                 }
                 self.form_section(ui, "Diagnostics", |this, ui| this.diagnostics_section(ui));
@@ -628,10 +633,8 @@ impl DamApp {
             if geometry_supports_buffer(geometry_type) {
                 ui.label("Lateral buffer (NM)");
                 ui.add(
-                    egui::TextEdit::singleline(
-                        &mut self.form.manual.attributes.lateral_buffer_nm,
-                    )
-                    .desired_width(96.0),
+                    egui::TextEdit::singleline(&mut self.form.manual.attributes.lateral_buffer_nm)
+                        .desired_width(96.0),
                 );
             }
         });
@@ -881,17 +884,27 @@ impl DamApp {
     }
 
     fn validation_section(&mut self, ui: &mut egui::Ui) {
-        if let Some(status) = &self.status {
-            ui.label(status);
-        }
-
-        if self.validation_issues.is_empty() {
-            return;
-        }
-
-        ui.colored_label(egui::Color32::LIGHT_RED, "Validation issues");
-        for issue in &self.validation_issues {
-            ui.label(format!("{}: {}", issue.field, issue.message));
+        match &self.submission_status {
+            SubmissionStatus::Idle => {}
+            SubmissionStatus::Invalid(issues) => {
+                ui.colored_label(egui::Color32::LIGHT_RED, "Blocked by validation errors.");
+                render_validation_issues(ui, issues);
+            }
+            SubmissionStatus::Building => {
+                ui.label("Building submission payload...");
+            }
+            SubmissionStatus::Ready { message } => {
+                ui.label(message);
+            }
+            SubmissionStatus::Submitting => {
+                ui.label("Submitting payload...");
+            }
+            SubmissionStatus::Sent { message } => {
+                ui.label(message);
+            }
+            SubmissionStatus::Failed { message } => {
+                ui.colored_label(egui::Color32::LIGHT_RED, message);
+            }
         }
     }
 
@@ -1014,8 +1027,7 @@ impl DamApp {
             match self.form.manual.next_click_target_after(target) {
                 Some(next_target) => {
                     self.pending_click_target = Some(next_target);
-                    if let Some(first_id) =
-                        click_target_widget_ids(next_target).into_iter().next()
+                    if let Some(first_id) = click_target_widget_ids(next_target).into_iter().next()
                     {
                         ui.ctx().memory_mut(|m| m.request_focus(first_id));
                     }
@@ -1154,8 +1166,7 @@ impl DamApp {
 
         if reset {
             self.form = DamFormState::new(&self.catalog);
-            self.validation_issues.clear();
-            self.status = None;
+            self.submission_status = SubmissionStatus::Idle;
             self.selected_period = 0;
             if let Some(map) = self.form.selected_map(&self.catalog) {
                 center_map_on_static_map(&mut self.map_memory, map);
@@ -1170,24 +1181,72 @@ impl DamApp {
         self.show_reset_confirm = open;
     }
 
-    fn export(&mut self) {
-        self.validation_issues.clear();
-        match self.form.to_creation(&self.catalog) {
-            Ok(creation) => match export_creation(&creation) {
-                Ok(message) => self.status = Some(message),
-                Err(ExportFailure::Validation(issues)) => {
-                    self.status = Some("Export blocked by validation errors.".to_owned());
-                    self.validation_issues = issues;
-                }
-                Err(ExportFailure::Io(message)) => {
-                    self.status = Some(format!("Export failed: {message}"));
-                }
-            },
-            Err(issues) => {
-                self.status = Some("Export blocked by validation errors.".to_owned());
-                self.validation_issues = issues;
+    fn send(&mut self) {
+        self.submission_status = SubmissionStatus::Building;
+        let payload = match self.build_json_payload_from_form() {
+            Ok(payload) => payload,
+            Err(status) => {
+                self.submission_status = status;
+                return;
             }
-        }
+        };
+
+        self.submission_status = SubmissionStatus::Submitting;
+        self.submission_status = match submit_payload(self.submission_endpoint.as_ref(), &payload) {
+            SubmissionResult::Sent(message) => SubmissionStatus::Sent { message },
+            SubmissionResult::Failed(message) => SubmissionStatus::Failed { message },
+        };
+    }
+
+    fn download_json(&mut self) {
+        self.submission_status = SubmissionStatus::Building;
+        let payload = match self.build_json_payload_from_form() {
+            Ok(payload) => payload,
+            Err(status) => {
+                self.submission_status = status;
+                return;
+            }
+        };
+
+        self.submission_status = match platform::download_payload(&payload) {
+            Ok(path) => SubmissionStatus::Ready {
+                message: format!("Exported {path}"),
+            },
+            Err(message) => SubmissionStatus::Failed {
+                message: format!("Export failed: {message}"),
+            },
+        };
+    }
+
+    fn build_json_payload_from_form(
+        &self,
+    ) -> Result<dam_core::SubmissionPayload, SubmissionStatus> {
+        let creation = self
+            .form
+            .to_creation(&self.catalog)
+            .map_err(SubmissionStatus::Invalid)?;
+
+        build_json_payload(&creation).map_err(status_from_export_error)
+    }
+}
+
+fn render_validation_issues(ui: &mut egui::Ui, issues: &[ValidationIssue]) {
+    if issues.is_empty() {
+        return;
+    }
+
+    ui.colored_label(egui::Color32::LIGHT_RED, "Validation issues");
+    for issue in issues {
+        ui.label(format!("{}: {}", issue.field, issue.message));
+    }
+}
+
+fn status_from_export_error(error: dam_core::ExportError) -> SubmissionStatus {
+    match error {
+        dam_core::ExportError::Validation(error) => SubmissionStatus::Invalid(error.issues),
+        error => SubmissionStatus::Failed {
+            message: format!("Payload build failed: {error}"),
+        },
     }
 }
 
@@ -1355,7 +1414,12 @@ fn manual_polygon_ui(ui: &mut egui::Ui, polygon: &mut PolygonDraftState) {
                     polygon_arc_center_lon_id(index),
                 );
                 ui.label("Radius (NM)");
-                numeric_field_ui_with_id(ui, &mut arc.radius_nm, polygon_arc_radius_id(index), 96.0);
+                numeric_field_ui_with_id(
+                    ui,
+                    &mut arc.radius_nm,
+                    polygon_arc_radius_id(index),
+                    96.0,
+                );
             }
         }
     }
@@ -1539,12 +1603,7 @@ fn coordinate_field_ui_with_ids(
     }
 }
 
-fn numeric_field_ui_with_id(
-    ui: &mut egui::Ui,
-    value: &mut String,
-    id: egui::Id,
-    width: f32,
-) {
+fn numeric_field_ui_with_id(ui: &mut egui::Ui, value: &mut String, id: egui::Id, width: f32) {
     let response = ui.add(
         egui::TextEdit::singleline(value)
             .id(id)
@@ -1700,23 +1759,6 @@ fn diagnostics(ui: &mut egui::Ui, diagnostics: &[CatalogDiagnostic]) {
 
 fn current_time_text() -> String {
     Local::now().time().format("%H:%M").to_string()
-}
-
-enum ExportFailure {
-    Validation(Vec<ValidationIssue>),
-    Io(String),
-}
-
-fn export_creation(creation: &DamCreation) -> Result<String, ExportFailure> {
-    match to_pretty_json(creation) {
-        Ok(json) => platform::export_json("dam-export.json", &json)
-            .map(|path| format!("Exported {path}"))
-            .map_err(ExportFailure::Io),
-        Err(dam_core::ExportError::Validation(error)) => {
-            Err(ExportFailure::Validation(error.issues))
-        }
-        Err(error) => Err(ExportFailure::Io(error.to_string())),
-    }
 }
 
 fn parse_date(value: &str, field: &str, issues: &mut Vec<ValidationIssue>) -> Option<NaiveDate> {

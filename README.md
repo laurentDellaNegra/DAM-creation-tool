@@ -6,6 +6,9 @@ The app targets both native desktop and web/WASM from one shared egui UI. The
 first version focuses on static predefined map creation with deterministic JSON
 export. AIXM export will be added later once the template is available.
 
+See [docs/architecture.md](docs/architecture.md) for the crate boundaries and
+send/export data flow.
+
 ## Layout
 
 ```text

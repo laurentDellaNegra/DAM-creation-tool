@@ -1,18 +1,18 @@
 #[cfg(not(target_arch = "wasm32"))]
-pub fn export_json(filename: &str, json: &str) -> Result<String, String> {
-    std::fs::write(filename, json).map_err(|error| error.to_string())?;
-    Ok(filename.to_owned())
+pub fn download_payload(payload: &dam_core::SubmissionPayload) -> Result<String, String> {
+    std::fs::write(&payload.filename, &payload.body).map_err(|error| error.to_string())?;
+    Ok(payload.filename.clone())
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn export_json(filename: &str, json: &str) -> Result<String, String> {
+pub fn download_payload(payload: &dam_core::SubmissionPayload) -> Result<String, String> {
     use wasm_bindgen::JsCast as _;
 
     let array = js_sys::Array::new();
-    array.push(&wasm_bindgen::JsValue::from_str(json));
+    array.push(&wasm_bindgen::JsValue::from_str(&payload.body));
 
     let options = web_sys::BlobPropertyBag::new();
-    options.set_type("application/json");
+    options.set_type(payload.content_type);
 
     let blob = web_sys::Blob::new_with_str_sequence_and_options(&array, &options)
         .map_err(|error| format!("{error:?}"))?;
@@ -30,9 +30,9 @@ pub fn export_json(filename: &str, json: &str) -> Result<String, String> {
         .map_err(|_| "created element is not an anchor".to_owned())?;
 
     anchor.set_href(&url);
-    anchor.set_download(filename);
+    anchor.set_download(&payload.filename);
     anchor.click();
 
     let _ = web_sys::Url::revoke_object_url(&url);
-    Ok(filename.to_owned())
+    Ok(payload.filename.clone())
 }

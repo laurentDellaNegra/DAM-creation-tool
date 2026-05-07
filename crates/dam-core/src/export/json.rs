@@ -1,17 +1,10 @@
 use crate::{
     DamCreation, DamMap, LevelUnit, ManualGeometry, ManualMap, ManualMapAttributes, PolygonNode,
-    ValidationError, validate_creation,
+    validate_creation,
 };
 use serde::Serialize;
-use thiserror::Error;
 
-#[derive(Debug, Error)]
-pub enum ExportError {
-    #[error("validation failed")]
-    Validation(#[from] ValidationError),
-    #[error("serialization failed: {0}")]
-    Serialization(#[from] serde_json::Error),
-}
+use super::ExportError;
 
 pub fn to_pretty_json(creation: &DamCreation) -> Result<String, ExportError> {
     validate_creation(creation)?;
@@ -302,6 +295,19 @@ mod tests {
         assert!(!json.contains("geojson"));
         assert!(json.contains(r#""unit": "FL""#));
         assert!(json.contains(r#""unit": "ft""#));
+    }
+
+    #[test]
+    fn invalid_creation_does_not_export_json() {
+        let mut creation = valid_creation(DamMap::Predefined(SelectedStaticMap {
+            id: "50714".to_owned(),
+            name: "HAUT VALAIS".to_owned(),
+        }));
+        creation.distribution.sectors.clear();
+
+        let error = to_pretty_json(&creation).unwrap_err();
+
+        assert!(matches!(error, ExportError::Validation(_)));
     }
 
     #[test]

@@ -202,7 +202,7 @@ impl ManualMapState {
     pub fn next_click_target_after(&mut self, target: ClickTarget) -> Option<ClickTarget> {
         match target {
             ClickTarget::PolygonPoint(i) | ClickTarget::PolygonArcRadius(i) => {
-                for j in (i + 1)..self.polygon.nodes.len() {
+                if let Some(j) = ((i + 1)..self.polygon.nodes.len()).next() {
                     return Some(match self.polygon.nodes[j] {
                         PolygonNodeDraft::Point(_) => ClickTarget::PolygonPoint(j),
                         PolygonNodeDraft::Arc(_) => ClickTarget::PolygonArcCenter(j),
@@ -253,10 +253,10 @@ impl ManualMapState {
                 }
             }
             ClickTarget::PolygonArcRadius(i) => {
-                if let Some(PolygonNodeDraft::Arc(arc)) = self.polygon.nodes.get_mut(i) {
-                    if let Some(center) = arc.center.silent_coordinate() {
-                        arc.radius_nm = format_nm(distance_nm(center, coord));
-                    }
+                if let Some(PolygonNodeDraft::Arc(arc)) = self.polygon.nodes.get_mut(i)
+                    && let Some(center) = arc.center.silent_coordinate()
+                {
+                    arc.radius_nm = format_nm(distance_nm(center, coord));
                 }
             }
             ClickTarget::PolygonLabel => {
@@ -331,14 +331,14 @@ impl ManualMapState {
                     draw_anchor_line: center.is_some(),
                 }
             }
-            ClickTarget::PolygonLabel
-            | ClickTarget::PieLabel
-            | ClickTarget::StripLabel => NextClickInfo {
-                anchor: None,
-                label: level_label.to_owned(),
-                show_distance: false,
-                draw_anchor_line: false,
-            },
+            ClickTarget::PolygonLabel | ClickTarget::PieLabel | ClickTarget::StripLabel => {
+                NextClickInfo {
+                    anchor: None,
+                    label: level_label.to_owned(),
+                    show_distance: false,
+                    draw_anchor_line: false,
+                }
+            }
             ClickTarget::ParaSymbolPoint | ClickTarget::TextNumberPoint => NextClickInfo {
                 anchor: None,
                 label: "Position".to_owned(),
@@ -468,9 +468,7 @@ impl ManualAttributesState {
 pub fn geometry_supports_buffer(geometry_type: ManualGeometryType) -> bool {
     matches!(
         geometry_type,
-        ManualGeometryType::Polygon
-            | ManualGeometryType::PieCircle
-            | ManualGeometryType::Strip
+        ManualGeometryType::Polygon | ManualGeometryType::PieCircle | ManualGeometryType::Strip
     )
 }
 
@@ -598,23 +596,12 @@ impl PieCircleDraftState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StripDraftState {
     pub point1: CoordinateFieldState,
     pub point2: CoordinateFieldState,
     pub width_nm: String,
     pub label: CoordinateFieldState,
-}
-
-impl Default for StripDraftState {
-    fn default() -> Self {
-        Self {
-            point1: CoordinateFieldState::default(),
-            point2: CoordinateFieldState::default(),
-            width_nm: String::new(),
-            label: CoordinateFieldState::default(),
-        }
-    }
 }
 
 impl StripDraftState {
@@ -931,7 +918,6 @@ fn parse_optional_positive_f64(
         }
     }
 }
-
 
 fn format_coordinate(value: f64) -> String {
     format!("{value:.6}")

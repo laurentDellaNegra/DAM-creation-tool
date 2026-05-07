@@ -451,8 +451,9 @@ mod tests {
 
     #[test]
     fn parses_remarks_with_fl_levels() {
-        let defaults =
-            parse_remarks("LEVEL/ll=3000/ft/ul=3500/ft/bt/et/glider/uhbu/APP/FIC/TWR/TEXT=LSR72 Bohlhof");
+        let defaults = parse_remarks(
+            "LEVEL/ll=3000/ft/ul=3500/ft/bt/et/glider/uhbu/APP/FIC/TWR/TEXT=LSR72 Bohlhof",
+        );
 
         assert_eq!(defaults.lower_level.as_deref(), Some("3000"));
         assert_eq!(defaults.lower_unit, Some(LevelUnit::Feet));
