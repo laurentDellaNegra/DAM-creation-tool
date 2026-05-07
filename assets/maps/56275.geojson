@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"L-SPACE_LS011 Holding Area",
+  "description":"REST, L-SPACE/ROUTINGS, 56275 - L-SPACE_LS011 Holding Area",
+  "extra":{
+    "mapAttribute":"OTHER"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.080932068649432, 47.43935827246961 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#2a4b58",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=5000/ft/bt/et/other/dl/uhbu/APP/ARF/BRN/BUO/DUB/EMM/FIC/LAC/LUG/TWR/UAC/TEXT=L-SPACE LS011 HLDG"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.1894925, 47.44749 ], [ 9.170850277777777, 47.46113444444445 ], [ 9.099231388888889, 47.46870833333333 ], [ 9.065323055555556, 47.458014444444444 ], [ 9.060370555555556, 47.42783333333333 ], [ 9.084933888888889, 47.41150583333334 ], [ 9.103111944444445, 47.40956111111111 ], [ 9.12885611111111, 47.438544722222225 ], [ 9.1894925, 47.44749 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#2a4b58",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/LS011 Holding"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.1894925, 47.44749 ], [ 9.170850277777777, 47.46113444444445 ], [ 9.099231388888889, 47.46870833333333 ], [ 9.065323055555556, 47.458014444444444 ], [ 9.060370555555556, 47.42783333333333 ], [ 9.084933888888889, 47.41150583333334 ], [ 9.103111944444445, 47.40956111111111 ], [ 9.12885611111111, 47.438544722222225 ], [ 9.1894925, 47.44749 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#2a4b58",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/LS011 Holding"
+    }
+  } ]
+}

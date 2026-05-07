@@ -1,0 +1,46 @@
+{
+  "type":"FeatureCollection",
+  "name":"Thurgau East",
+  "description":"REST, FIRING, ANTI HAIL, 56188 - Thurgau East",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.311482512338907, 47.495695171310985 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=0000/ft/ul=7500/ft/bt/et/dl/uft/unbu/TEXT=ANTI HAIL FIRING THURGAU-E"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.379186667, 47.57345639 ], [ 9.335777222, 47.59203028 ], [ 9.232222222, 47.58916667 ], [ 9.183888889, 47.52416667 ], [ 9.181111111, 47.43916667 ], [ 9.241281389, 47.427245 ], [ 9.307530833, 47.42619278 ], [ 9.374660833, 47.44937917 ], [ 9.415361111, 47.47388167 ], [ 9.379186667, 47.57345639 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/Anti-Hail Thurgau East"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.379186667, 47.57345639 ], [ 9.335777222, 47.59203028 ], [ 9.232222222, 47.58916667 ], [ 9.183888889, 47.52416667 ], [ 9.181111111, 47.43916667 ], [ 9.241281389, 47.427245 ], [ 9.307530833, 47.42619278 ], [ 9.374660833, 47.44937917 ], [ 9.415361111, 47.47388167 ], [ 9.379186667, 47.57345639 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/Anti-Hail Thurgau East"
+    }
+  } ]
+}

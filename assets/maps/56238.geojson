@@ -1,0 +1,30 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSMD 34",
+  "description":"REST, AOR, 56238 - LSMD 34",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 2.053138199770073, 44.401636759413215 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":12,
+      "color":"#dcdcdc",
+      "font":"ARIAL",
+      "remarks":"LEVEL/ll=000/ul=125/unbu/APP/ARF/BRN/DUB/EMM/FIC/LAC/LUG/STG/TWR/UAC/TEXT=DUMMY STATIC 000-125"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.540833333, 47.39694444 ], [ 8.699444444, 47.47416667 ], [ 8.759444444, 47.46111111 ], [ 8.859166667, 47.43972222 ], [ 8.8516375, 47.42398917 ], [ 9.354168611, 47.31233889 ], [ 9.304072778, 47.312635 ], [ 9.159439722, 47.27354361 ], [ 9.117735556, 47.24151333 ], [ 9.050362778, 47.18965417 ], [ 9.067156389, 47.06514611 ], [ 8.778847778, 47.02291778 ], [ 8.731447778, 47.07449028 ], [ 8.615555556, 47.25861111 ], [ 8.552086944, 47.34245333 ], [ 8.536111111, 47.36361111 ], [ 8.540833333, 47.39694444 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":6,
+      "color":"#a98056",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"AOR DUB 5500ft"
+    }
+  } ]
+}

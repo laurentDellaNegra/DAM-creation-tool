@@ -1,0 +1,76 @@
+{
+  "type":"FeatureCollection",
+  "name":"PARA Bressaucourt",
+  "description":"REST, PARA/AEROBATICS, 80379 - PARA Bressaucourt",
+  "extra":{
+    "mapAttribute":"PARACHUTE"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 1.0972222222222223, 44.97 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#006699",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=999/parachute/TEXT=DUMMY - PARA"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.028888888888889, 47.3925 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#505150",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"LSZQ",
+      "info":{
+        "elevation":1866,
+        "additionalInfos":"",
+        "name":"LSZQ",
+        "description":"BRESSAUCOURT",
+        "runways":[ {
+          "surface":"ASPH",
+          "lda":"800/800/18",
+          "runway":"07/25"
+        } ],
+        "frequencies":[ {
+          "onSameLine":false,
+          "name":"AD",
+          "frequency":"122.055"
+        } ]
+      },
+      "tooltipInfo":"LSZQ/BRESSAUCOURT\\AD: 122.055\\elevation 1866 ft\\RWY: 07/25 LDA: 800/800/18 - ASPH",
+      "symbol":"A_AERO_SYM1",
+      "symbol_type":"AIRPORT",
+      "runwaySymbol":"SYMB_ORIENT11"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.0377777777777775, 47.404444444444444 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":18,
+      "color":"#006699",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"LSZQ_PARA",
+      "symbol":"A_SYMBOL_SYM31",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"LSZQ_PARA",
+        "coordinates":"47.24.16N  07.02.16E",
+        "description":"Para Bressaucourt"
+      },
+      "tooltipInfo":"Para Bressaucourt"
+    }
+  } ]
+}

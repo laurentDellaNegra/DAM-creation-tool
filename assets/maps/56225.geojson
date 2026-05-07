@@ -1,0 +1,42 @@
+{
+  "type":"FeatureCollection",
+  "name":"DITON - BASGO Line",
+  "description":"REST, MISC, WEF DAVOS, 56225 - DITON - BASGO Line",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 5.2758221204664695, 45.74215746684291 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#dcdcdc",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=190/ul=999/ARF/BRN/BUO/DUB/EMM/FIC/LAC/LUG/STG/UAC/TEXT=WEF DITON - BASGO"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.345555555555556, 47.221111111111114 ], [ 8.452777777777778, 46.42388888888889 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#666666",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"/BUFFER/DITON - BASGO LINE"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.345555555555556, 47.221111111111114 ], [ 8.452777777777778, 46.42388888888889 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#666666",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"/NETTO/DITON - BASGO LINE"
+    }
+  } ]
+}

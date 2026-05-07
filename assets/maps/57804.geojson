@@ -1,0 +1,46 @@
+{
+  "type":"FeatureCollection",
+  "name":"Thurgau West",
+  "description":"REST, FIRING, ANTI HAIL, 57804 - Thurgau West",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.117503471023914, 47.5566073434796 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=0000/ft/ul=6000/ft/bt/et/dl/uft/unbu/TEXT=ANTI HAIL FIRING THURGAU-W"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.181111111, 47.43916667 ], [ 9.183888889, 47.52416667 ], [ 9.232222222, 47.58916667 ], [ 9.140277778, 47.58611111 ], [ 9.034794167, 47.61469222 ], [ 9.014009722, 47.59776167 ], [ 8.966569444, 47.55859861 ], [ 8.968044722, 47.55160278 ], [ 9.062777778, 47.54444444 ], [ 9.085277778, 47.51611111 ], [ 9.081126944, 47.45906583 ], [ 9.181111111, 47.43916667 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/Anti-Hail Thurgau West"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.181111111, 47.43916667 ], [ 9.183888889, 47.52416667 ], [ 9.232222222, 47.58916667 ], [ 9.140277778, 47.58611111 ], [ 9.034794167, 47.61469222 ], [ 9.014009722, 47.59776167 ], [ 8.966569444, 47.55859861 ], [ 8.968044722, 47.55160278 ], [ 9.062777778, 47.54444444 ], [ 9.085277778, 47.51611111 ], [ 9.081126944, 47.45906583 ], [ 9.181111111, 47.43916667 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/Anti-Hail Thurgau West"
+    }
+  } ]
+}

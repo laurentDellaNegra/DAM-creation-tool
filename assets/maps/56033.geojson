@@ -1,0 +1,42 @@
+{
+  "type":"FeatureCollection",
+  "name":"Angie Track",
+  "description":"REST, MILITARY, MISC, 56033 - Angie Track",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.914458495268804, 47.88348792242133 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=200/ul=230/bt/et/dl/TEXT=ANTI HAIL FIRING - BEGNINS"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.360833333333334, 48.17 ], [ 8.209722222222222, 47.86055555555556 ], [ 7.826666666666666, 47.840833333333336 ], [ 7.6130555555555555, 47.95305555555556 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"/NETTO/AIR REFUELING ANGIE AAR TRACK"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.360833333333334, 48.17 ], [ 8.209722222222222, 47.86055555555556 ], [ 7.826666666666666, 47.840833333333336 ], [ 7.6130555555555555, 47.95305555555556 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"/BUFFER/AIR REFUELING ANGIE AAR TRACK"
+    }
+  } ]
+}

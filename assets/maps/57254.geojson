@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSR9 Hinterrhein FRNG",
+  "description":"REST, RESTRICTED AREAS, CH, 57254 - LSR9 Hinterrhein FRNG",
+  "extra":{
+    "mapAttribute":"RESTRICTED"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.118111744002992, 46.49324781689281 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=40000/ft/bt/et/restricted/dl/flc/unbu/TEXT=LSR9 Hinterrhein FRNG"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.119722222222222, 46.52602777777778 ], [ 9.070916666666667, 46.48061111111111 ], [ 9.085833333333333, 46.47436111111111 ], [ 9.111, 46.478944444444444 ], [ 9.135972222222222, 46.46508333333333 ], [ 9.168166666666666, 46.46244444444444 ], [ 9.181027777777778, 46.472833333333334 ], [ 9.168388888888888, 46.49433333333333 ], [ 9.180333333333333, 46.507888888888886 ], [ 9.177138888888889, 46.52177777777778 ], [ 9.119722222222222, 46.52602777777778 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/LSR9 Hinterrhein"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.119722222222222, 46.52602777777778 ], [ 9.070916666666667, 46.48061111111111 ], [ 9.085833333333333, 46.47436111111111 ], [ 9.111, 46.478944444444444 ], [ 9.135972222222222, 46.46508333333333 ], [ 9.168166666666666, 46.46244444444444 ], [ 9.181027777777778, 46.472833333333334 ], [ 9.168388888888888, 46.49433333333333 ], [ 9.180333333333333, 46.507888888888886 ], [ 9.177138888888889, 46.52177777777778 ], [ 9.119722222222222, 46.52602777777778 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/LSR9 Hinterrhein"
+    }
+  } ]
+}

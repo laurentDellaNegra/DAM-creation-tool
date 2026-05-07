@@ -1,0 +1,32 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSME CTR2",
+  "description":"REST, CTR/TMA, 56229 - LSME CTR2",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.376959625967853, 47.07159660233358 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#dcdcdc",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=0000/ft/ul=4500/ft/unbu/APP/ARF/BRN/DUB/FIC/LUG/STG/TWR/TEXT=CTR2 EMMEN"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.277214444444445, 47.02507527777778 ], [ 8.3044325, 47.00696722222222 ], [ 8.309281944444445, 47.0103175 ], [ 8.338372222222223, 47.03042333333333 ], [ 8.424963333333334, 47.04316444444444 ], [ 8.491127777777777, 47.10142027777778 ], [ 8.407379166666667, 47.14456027777778 ], [ 8.4050275, 47.13874638888889 ], [ 8.277214444444445, 47.02507527777778 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0001000101000100000100010100010000010001010001000001000101000100",
+      "tooltipInfo":"EMMEN CTR 2\\4500ft AMSL\\GND"
+    }
+  } ]
+}

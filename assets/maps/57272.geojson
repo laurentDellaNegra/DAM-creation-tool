@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSR45 Chlialp",
+  "description":"REST, RESTRICTED AREAS, CH, 57272 - LSR45 Chlialp",
+  "extra":{
+    "mapAttribute":"RESTRICTED"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.502743173279578, 46.76497841401119 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=16500/ft/bt/et/restricted/dl/flc/unbu/TEXT=LSR45 CHLIALP FRNG"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.4711875, 46.777232222222224 ], [ 8.468426944444445, 46.754174166666665 ], [ 8.481625833333334, 46.746094166666666 ], [ 8.52104638888889, 46.746610833333335 ], [ 8.522644722222223, 46.75041861111111 ], [ 8.537895, 46.75843916666667 ], [ 8.542265833333333, 46.761364444444446 ], [ 8.547329722222223, 46.77672944444444 ], [ 8.533649444444444, 46.78720305555556 ], [ 8.5246075, 46.786764166666664 ], [ 8.499199722222222, 46.78628277777778 ], [ 8.4711875, 46.777232222222224 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/LSR45 CHLIALP"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.4711875, 46.777232222222224 ], [ 8.468426944444445, 46.754174166666665 ], [ 8.481625833333334, 46.746094166666666 ], [ 8.52104638888889, 46.746610833333335 ], [ 8.522644722222223, 46.75041861111111 ], [ 8.537895, 46.75843916666667 ], [ 8.542265833333333, 46.761364444444446 ], [ 8.547329722222223, 46.77672944444444 ], [ 8.533649444444444, 46.78720305555556 ], [ 8.5246075, 46.786764166666664 ], [ 8.499199722222222, 46.78628277777778 ], [ 8.4711875, 46.777232222222224 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/LSR45 CHLIALP"
+    }
+  } ]
+}

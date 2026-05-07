@@ -1,0 +1,152 @@
+{
+  "type":"FeatureCollection",
+  "name":"*Test Pattern EA9",
+  "description":"REST, L-SPACE/ROUTINGS, 56190 - *Test Pattern EA9",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.666666666666666, 46.46666666666667 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#979797",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"DIBIV",
+      "symbol":"A_SYMBOL_SYM29",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"TESTPATTERN EA9",
+        "name":"DIBIV",
+        "coordinates":"46.28.00N  09.40.00E",
+        "description":"DIBIV"
+      },
+      "tooltipInfo":"DIBIV\\TESTPATTERN EA9\\46.28.00N  09.40.00E"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.916666666666666, 46.766666666666666 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#979797",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"UVULA",
+      "symbol":"A_SYMBOL_SYM29",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"TESTPATTERN EA9",
+        "name":"UVULA",
+        "coordinates":"46.46.00N  09.55.00E",
+        "description":"UVULA"
+      },
+      "tooltipInfo":"UVULA\\TESTPATTERN EA9\\46.46.00N  09.55.00E"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.35, 47.15 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#979797",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"OLBOX",
+      "symbol":"A_SYMBOL_SYM29",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"OLBOX",
+        "coordinates":"47.09.00N  09.21.00E",
+        "description":"OLBOX"
+      },
+      "tooltipInfo":"OLBOX\\47.09.00N  09.21.00E"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.233333333333333, 47.13333333333333 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#979797",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"OLNAV",
+      "symbol":"A_SYMBOL_SYM29",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"OLNAV",
+        "coordinates":"47.08.00N  09.14.00E",
+        "description":"OLNAV"
+      },
+      "tooltipInfo":"OLNAV\\47.08.00N  09.14.00E"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.533333333333333, 47.1 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#979797",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"XAMEX",
+      "symbol":"A_SYMBOL_SYM29",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"XAMEX",
+        "coordinates":"47.06.00N  09.32.00E",
+        "description":"XAMEX"
+      },
+      "tooltipInfo":"XAMEX\\47.06.00N  09.32.00E"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 9.666666666666666, 46.46666666666667 ], [ 9.916666666666666, 46.766666666666666 ], [ 9.533333333333333, 47.1 ], [ 9.35, 47.15 ], [ 9.233333333333333, 47.13333333333333 ], [ 9.666666666666666, 46.46666666666667 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#8c8c3c",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"TESTPATTERN EA9"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 9.666666666666666, 46.46666666666667 ], [ 9.916666666666666, 46.766666666666666 ], [ 9.533333333333333, 47.1 ], [ 9.35, 47.15 ], [ 9.233333333333333, 47.13333333333333 ], [ 9.666666666666666, 46.46666666666667 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#8c8c3c",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"/NETTO/TESTPATTERN EA9"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 9.666666666666666, 46.46666666666667 ], [ 9.916666666666666, 46.766666666666666 ], [ 9.533333333333333, 47.1 ], [ 9.35, 47.15 ], [ 9.233333333333333, 47.13333333333333 ], [ 9.666666666666666, 46.46666666666667 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#8c8c3c",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"/BUFFER/TESTPATTERN EA9"
+    }
+  } ]
+}

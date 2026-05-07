@@ -1,0 +1,46 @@
+{
+  "type":"FeatureCollection",
+  "name":"L-SPACE_LSHL_WEST",
+  "description":"REST, L-SPACE/ROUTINGS, 56277 - L-SPACE_LSHL_WEST",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.902077169049058, 47.06643007648044 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#2a4b58",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=5500/ft/bt/et/dl/uhbu/APP/ARF/BRN/BUO/DUB/FIC/LAC/LUG/STG/TWR/UAC/TEXT=L-SPACE_LSHL_WEST"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.227260277777777, 47.04788027777778 ], [ 8.213757777777777, 47.05549361111111 ], [ 8.085474166666666, 47.02827888888889 ], [ 8.066996388888889, 47.02972638888889 ], [ 7.8222080555555555, 47.13173361111111 ], [ 7.8145702777777775, 47.12321083333333 ], [ 8.065464166666667, 47.01865361111111 ], [ 8.089870277777777, 47.01864666666667 ], [ 8.227260277777777, 47.04788027777778 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#2a4b58",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/L-SPACE_LSHL_WEST"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.227260277777777, 47.04788027777778 ], [ 8.213757777777777, 47.05549361111111 ], [ 8.085474166666666, 47.02827888888889 ], [ 8.066996388888889, 47.02972638888889 ], [ 7.8222080555555555, 47.13173361111111 ], [ 7.8145702777777775, 47.12321083333333 ], [ 8.065464166666667, 47.01865361111111 ], [ 8.089870277777777, 47.01864666666667 ], [ 8.227260277777777, 47.04788027777778 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#2a4b58",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/L-SPACE_LSHL_WEST"
+    }
+  } ]
+}

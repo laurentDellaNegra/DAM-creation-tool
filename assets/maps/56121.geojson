@@ -1,0 +1,77 @@
+{
+  "type":"FeatureCollection",
+  "name":"PARA Biel-Kappelen",
+  "description":"REST, PARA/AEROBATICS, 56121 - PARA Biel-Kappelen",
+  "extra":{
+    "mapAttribute":"PARACHUTE"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 1.0972222222222223, 44.97 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#006699",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=999/parachute/TEXT=DUMMY - PARA"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.29, 47.089166666666664 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#505150",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"LSZP",
+      "info":{
+        "elevation":1437,
+        "additionalInfos":"",
+        "name":"LSZP",
+        "description":"BIEL KAPPELEN",
+        "runways":[ {
+          "surface":"GRASS",
+          "lda":"570/450/30",
+          "runway":"05/23",
+          "remarks":"PPR"
+        } ],
+        "frequencies":[ {
+          "onSameLine":false,
+          "name":"AD",
+          "frequency":"123.155"
+        } ]
+      },
+      "tooltipInfo":"LSZP/BIEL KAPPELEN\\AD: 123.155\\elevation 1437 ft\\RWY: 05/23 LDA: 570/450/30 - GRASS PPR",
+      "symbol":"A_AERO_SYM4",
+      "symbol_type":"AIRPORT",
+      "runwaySymbol":"SYMB_ORIENT13"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.272777777777778, 47.09861111111111 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":18,
+      "color":"#006699",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"PJBIEL",
+      "symbol":"A_SYMBOL_SYM31",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"PJBIEL",
+        "coordinates":"47.05.55N  07.16.22E",
+        "description":"BIEL KAPPELEN"
+      },
+      "tooltipInfo":"BIEL KAPPELEN"
+    }
+  } ]
+}

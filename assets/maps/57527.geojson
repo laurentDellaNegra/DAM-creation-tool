@@ -1,0 +1,44 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSZH TMA S1",
+  "description":"REST, CTR/TMA, 57527 - LSZH TMA S1",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.669216111111112, 47.20761805555556 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#dcdcdc",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=0000/ft/ul=5500/ft/bt/et/unbu/APP/ARF/BRN/BUO/DUB/EMM/FIC/LUG/STG/TWR/TEXT=ZURICH TMA S1"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.656944444, 47.19305556 ], [ 8.749722222, 47.19722222 ], [ 8.747447778, 47.23968861 ], [ 8.792881667, 47.24827222 ], [ 8.773866667, 47.27259167 ], [ 8.745555556, 47.275 ], [ 8.615555556, 47.25861111 ], [ 8.604901389, 47.25708222 ], [ 8.618866944, 47.23669972 ], [ 8.631459167, 47.23343083 ], [ 8.656944444, 47.19305556 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":24,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0010001010001000001000101000100000100010100010000010001010001000",
+      "tooltipInfo":"LSZH TMA\\4500ft"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.639586111, 47.22059694 ], [ 8.747447778, 47.23968861 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":22,
+      "color":"#2c5f00",
+      "linePattern":"PS_USERSTYLE 0505",
+      "tooltipInfo":"MVA S1 \\ 6000ft"
+    }
+  } ]
+}

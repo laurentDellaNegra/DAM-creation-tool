@@ -1,0 +1,30 @@
+{
+  "type":"FeatureCollection",
+  "name":"LFSB RWY 33 Buffer",
+  "description":"REST, CTR/TMA, 54883 - LFSB RWY 33 Buffer",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.236665600304931, 47.30339245776263 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":1,
+      "color":"#e89459",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=6000/ft/ul=100/bt/lnbu/unbu/BRN/TEXT=LFSB TMA T  RWY 33"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 7.058802222222222, 47.31919638888889 ], [ 7.1922958333333336, 47.310275833333336 ], [ 7.6099169444444446, 47.18642555555556 ], [ 7.755806944444444, 47.2229825 ], [ 7.847084722222222, 47.27922916666667 ], [ 7.875456111111111, 47.2966725 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#e89459",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"BUFFER BASEL BERN ILS33 ON"
+    }
+  } ]
+}

@@ -1,0 +1,32 @@
+{
+  "type":"FeatureCollection",
+  "name":"Spickel Schratten DVO/ARR 34",
+  "description":"REST, TRA, WEST-CENTRE, 80931 - Spickel Schratten DVO/ARR 34",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.298333333333334, 47.17583333333334 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#dcdcdc",
+      "font":"ARIAL",
+      "remarks":"LEVEL/ll=200/ul=999/bt/et/tra/dl/ARF/DUB/FIC/LAC/LUG/STG/UAC/TEXT=TRA SCHRATTEN DVO ARR34"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 7.994722222222222, 47.131388888888885 ], [ 8.370555555555555, 47.138333333333335 ], [ 8.492222222222223, 47.14472222222222 ], [ 8.490833333333333, 47.15555555555556 ], [ 8.431944444444444, 47.23222222222222 ], [ 8.198888888888888, 47.19861111111111 ], [ 7.994722222222222, 47.131388888888885 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"TRA SCHRATTEN  DVO/MIL ON"
+    }
+  } ]
+}

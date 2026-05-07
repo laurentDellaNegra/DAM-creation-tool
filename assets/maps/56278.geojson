@@ -1,0 +1,46 @@
+{
+  "type":"FeatureCollection",
+  "name":"L-SPACE_LSHL_SW",
+  "description":"REST, L-SPACE/ROUTINGS, 56278 - L-SPACE_LSHL_SW",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.021143334220026, 46.98694306470131 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#2a4b58",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=8000/ft/bt/et/dl/uhbu/APP/ARF/BRN/BUO/DUB/FIC/LAC/LUG/STG/TWR/UAC/TEXT=L-SPACE_LSHL_SW"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.089870277777777, 47.01864666666667 ], [ 8.065464166666667, 47.01865361111111 ], [ 8.0386675, 46.97686888888889 ], [ 8.052099722222222, 46.97291361111111 ], [ 8.075976388888888, 47.01013388888889 ], [ 8.089870277777777, 47.01864666666667 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#2a4b58",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/L-SPACE_LSHL_SW"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.089870277777777, 47.01864666666667 ], [ 8.065464166666667, 47.01865361111111 ], [ 8.0386675, 46.97686888888889 ], [ 8.052099722222222, 46.97291361111111 ], [ 8.075976388888888, 47.01013388888889 ], [ 8.089870277777777, 47.01864666666667 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#2a4b58",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/L-SPACE_LSHL_SW"
+    }
+  } ]
+}

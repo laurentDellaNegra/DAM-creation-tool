@@ -1,0 +1,11 @@
+[package]
+name = "dam-native"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+dam-egui.workspace = true
+eframe.workspace = true
+egui.workspace = true
+

@@ -1,0 +1,100 @@
+{
+  "type":"FeatureCollection",
+  "name":"PARA Locarno",
+  "description":"REST, PARA/AEROBATICS, 56136 - PARA Locarno",
+  "extra":{
+    "mapAttribute":"PARACHUTE"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 1.0972222222222223, 44.97 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#006699",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=999/parachute/TEXT=DUMMY - PARA"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.878320555555556, 46.165365 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#505150",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"LSZL",
+      "info":{
+        "elevation":650,
+        "additionalInfos":"",
+        "name":"LSZL",
+        "description":"LOCARNO",
+        "runways":[ {
+          "surface":"ASPH",
+          "lda":"670/750/23",
+          "runway":"08L/26R"
+        }, {
+          "surface":"GRASS",
+          "lda":"700/700/30",
+          "runway":"08C/26C"
+        }, {
+          "surface":"GRASS",
+          "lda":"700/700/30",
+          "runway":"08R/26L"
+        } ],
+        "frequencies":[ {
+          "onSameLine":false,
+          "name":"TWR",
+          "frequency":"134.825"
+        }, {
+          "onSameLine":false,
+          "name":"GND",
+          "frequency":"121.7"
+        }, {
+          "onSameLine":false,
+          "name":"GLD",
+          "frequency":"122.480"
+        }, {
+          "onSameLine":false,
+          "name":"ATIS",
+          "frequency":"133.455"
+        }, {
+          "onSameLine":false,
+          "name":"AFIS",
+          "frequency":"134.825"
+        } ]
+      },
+      "tooltipInfo":"LSZL/LOCARNO\\TWR: 134.825\\GND: 121.7\\GLD: 122.480\\ATIS: 133.455\\AFIS: 134.825\\elevation 650 ft\\RWY: 08L/26R LDA: 670/750/23 - ASPH\\RWY: 08C/26C LDA: 700/700/30 - GRASS\\RWY: 08R/26L LDA: 700/700/30 - GRASS",
+      "symbol":"A_AERO_SYM3",
+      "symbol_type":"AIRPORT",
+      "runwaySymbol":"SYMB_ORIENT10"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.925, 46.2 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":18,
+      "color":"#006699",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"Z4418",
+      "symbol":"A_SYMBOL_SYM31",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"Z4418",
+        "coordinates":"46.12.00N  08.55.30E",
+        "description":"PARA LOCARNO"
+      },
+      "tooltipInfo":"PARA LOCARNO"
+    }
+  } ]
+}

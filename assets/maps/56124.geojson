@@ -1,0 +1,92 @@
+{
+  "type":"FeatureCollection",
+  "name":"PARA Grenchen",
+  "description":"REST, PARA/AEROBATICS, 56124 - PARA Grenchen",
+  "extra":{
+    "mapAttribute":"PARACHUTE"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 1.0972222222222223, 44.97 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#006699",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=999/parachute/TEXT=DUMMY - PARA"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.416388888888889, 47.18138888888889 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#505150",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"LSZG",
+      "info":{
+        "elevation":1411,
+        "additionalInfos":"",
+        "name":"LSZG",
+        "description":"GRENCHEN",
+        "runways":[ {
+          "surface":"ASPH",
+          "lda":"865/1000/23",
+          "runway":"06/24"
+        }, {
+          "surface":"GRASS",
+          "lda":"610/700/20",
+          "runway":"06R/24L"
+        } ],
+        "frequencies":[ {
+          "onSameLine":false,
+          "name":"TWR/VDF",
+          "frequency":"120.105 119.7"
+        }, {
+          "onSameLine":false,
+          "name":"GND",
+          "frequency":"121.805"
+        }, {
+          "onSameLine":false,
+          "name":"GLD",
+          "frequency":"127.580"
+        }, {
+          "onSameLine":false,
+          "name":"ATIS",
+          "frequency":"121.105"
+        } ]
+      },
+      "tooltipInfo":"LSZG/GRENCHEN\\TWR/VDF: 120.105 119.7 119.7\\GND: 121.805\\GLD: 127.580\\ATIS: 121.105\\elevation 1411 ft\\RWY: 06/24 LDA: 865/1000/23 - ASPH\\RWY: 06R/24L LDA: 610/700/20 - GRASS",
+      "symbol":"A_AERO_SYM2",
+      "symbol_type":"AIRPORT",
+      "runwaySymbol":"SYMB_ORIENT11"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.389444444444444, 47.172222222222224 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":18,
+      "color":"#006699",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"PJGREN",
+      "symbol":"A_SYMBOL_SYM31",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"PJGREN",
+        "coordinates":"47.10.20N  07.23.22E",
+        "description":"PARA GRENCHEN"
+      },
+      "tooltipInfo":"PARA GRENCHEN"
+    }
+  } ]
+}

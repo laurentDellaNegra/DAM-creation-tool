@@ -1,0 +1,60 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSMD CTR/TMA",
+  "description":"REST, CTR/TMA, 57524 - LSMD CTR/TMA",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.688929092226878, 47.378473378081154 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#dcdcdc",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=0000/ft/ul=095/unbu/APP/ARF/BRN/BUO/DUB/EMM/FIC/LUG/STG/TWR/TEXT=CTR TMA DÜBENDORF"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.832777778, 47.38444444 ], [ 8.808888889, 47.33472222 ], [ 8.875277778, 47.31083333 ], [ 8.906666667, 47.37972222 ], [ 8.832777778, 47.38444444 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":24,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0001000101000100000100010100010000010001010001000001000101000100",
+      "tooltipInfo":"LSMD TMA 1\\FL100\\3500 ft"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.943055556, 47.3775 ], [ 8.906666667, 47.37972222 ], [ 8.875277778, 47.31083333 ], [ 8.925, 47.29138889 ], [ 9.016111111, 47.27194444 ], [ 9.053055556, 47.34444444 ], [ 8.943055556, 47.3775 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":24,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0001000101000100000100010100010000010001010001000001000101000100",
+      "tooltipInfo":"LSMD TMA 2\\FL100\\5500 ft"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.569444444, 47.31944444 ], [ 8.589444444, 47.29305556 ], [ 8.786944444, 47.28833333 ], [ 8.808888889, 47.33472222 ], [ 8.832777778, 47.38444444 ], [ 8.859166667, 47.43972222 ], [ 8.759444444, 47.46111111 ], [ 8.699444444, 47.47416667 ], [ 8.540833333, 47.39694444 ], [ 8.536111111, 47.36361111 ], [ 8.569444444, 47.31944444 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0001000101000100000100010100010000010001010001000001000101000100",
+      "tooltipInfo":"LSMD CTR\\FL100\\GND"
+    }
+  } ]
+}

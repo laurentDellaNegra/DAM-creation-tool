@@ -1,0 +1,60 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSMM TMA 4+5+6",
+  "description":"REST, CTR/TMA, 57523 - LSMM TMA 4+5+6",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.803184444444445, 46.660806388888886 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#dcdcdc",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=130/bt/et/unbu/TEXT=LSMM TMA4+5+6"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 7.864421666666667, 46.703065555555554 ], [ 7.889972222222222, 46.67478222222222 ], [ 7.933843333333334, 46.693495 ], [ 7.916199444444445, 46.71346694444444 ], [ 7.881522777777778, 46.71035944444444 ], [ 7.864421666666667, 46.703065555555554 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0001000101000100000100010100010000010001010001000001000101000100",
+      "tooltipInfo":"LSMM TMA4\\FL130\\5500ft"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 7.864421666666667, 46.703065555555554 ], [ 7.825299722222223, 46.69403388888889 ], [ 7.855877777777778, 46.66023083333333 ], [ 7.889972222222222, 46.67478222222222 ], [ 7.864421666666667, 46.703065555555554 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":24,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0001000101000100000100010100010000010001010001000001000101000100",
+      "tooltipInfo":"LSMM TMA5\\FL130\\7500ft"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 7.825299722222223, 46.69403388888889 ], [ 7.777811111111111, 46.68306861111111 ], [ 7.79158, 46.632777777777775 ], [ 7.855877777777778, 46.66023083333333 ], [ 7.825299722222223, 46.69403388888889 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":24,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0001000101000100000100010100010000010001010001000001000101000100",
+      "tooltipInfo":"LSMM TMA6\\FL130\\9500ft"
+    }
+  } ]
+}

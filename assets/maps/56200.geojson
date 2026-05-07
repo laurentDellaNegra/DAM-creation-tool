@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSR39A",
+  "description":"REST, RESTRICTED AREAS, PILATUS, 56200 - LSR39A",
+  "extra":{
+    "mapAttribute":"RESTRICTED"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.246575196034511, 46.85906311215669 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=9000/ft/ul=130/bt/et/restricted/dl/flc/lnbu/unbu/TEXT=LSR39A PC24"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.227224166666666, 46.916668333333334 ], [ 8.140671666666666, 46.84870277777778 ], [ 8.3288725, 46.832433888888886 ], [ 8.340874722222223, 46.929606944444444 ], [ 8.273108888888888, 46.88350444444445 ], [ 8.24172888888889, 46.88989083333333 ], [ 8.227224166666666, 46.916668333333334 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/LSR39A PILATUS\\NO BUFFER REQUIRED"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.227224166666666, 46.916668333333334 ], [ 8.140671666666666, 46.84870277777778 ], [ 8.3288725, 46.832433888888886 ], [ 8.340874722222223, 46.929606944444444 ], [ 8.273108888888888, 46.88350444444445 ], [ 8.24172888888889, 46.88989083333333 ], [ 8.227224166666666, 46.916668333333334 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/LSR39A PILATUS\\NO BUFFER REQUIRED"
+    }
+  } ]
+}

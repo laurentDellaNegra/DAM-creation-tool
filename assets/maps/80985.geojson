@@ -1,0 +1,45 @@
+{
+  "type":"FeatureCollection",
+  "name":"LI-R108 Colico North Line",
+  "description":"REST, MISC, WEF DAVOS, 80985 - LI-R108 Colico North Line",
+  "extra":{
+    "mapAttribute":"RESTRICTED"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.362282730643974, 46.35168362384889 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=215/ul=999/bt/et/restricted/dl/APP/ARF/BRN/BUO/DUB/EMM/FIC/LAC/LUG/STG/TWR/TEXT=LI-R108 COLICO North Line"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 9.16611111111111, 46.245555555555555 ], [ 9.568333333333333, 46.36138888888889 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "tooltipInfo":"/NETTO/COLICO North Line"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 9.16611111111111, 46.245555555555555 ], [ 9.568333333333333, 46.36138888888889 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "tooltipInfo":"/BUFFER/COLICO North Line"
+    }
+  } ]
+}

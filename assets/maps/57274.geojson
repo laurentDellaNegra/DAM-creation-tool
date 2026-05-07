@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSR47 Val Piana Cavagnolo",
+  "description":"REST, RESTRICTED AREAS, CH, 57274 - LSR47 Val Piana Cavagnolo",
+  "extra":{
+    "mapAttribute":"RESTRICTED"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.496915982508108, 46.47819202303708 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=15500/ft/bt/et/restricted/dl/flc/unbu/TEXT=LSR47 VAL PIANA\\CAVAGNOLO FRNG"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.480090833333334, 46.47963333333333 ], [ 8.48234, 46.4730025 ], [ 8.489310833333333, 46.46862222222222 ], [ 8.497586666666667, 46.46687444444444 ], [ 8.509221111111112, 46.466516666666664 ], [ 8.514077222222221, 46.46928777777778 ], [ 8.513672222222223, 46.4733775 ], [ 8.514891944444445, 46.47781722222222 ], [ 8.505868611111111, 46.493295555555555 ], [ 8.492531944444444, 46.49265777777778 ], [ 8.4920825, 46.49050916666667 ], [ 8.480090833333334, 46.47963333333333 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/LSR47 VAL PIANA CAVAGNOLO"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.480090833333334, 46.47963333333333 ], [ 8.48234, 46.4730025 ], [ 8.489310833333333, 46.46862222222222 ], [ 8.497586666666667, 46.46687444444444 ], [ 8.509221111111112, 46.466516666666664 ], [ 8.514077222222221, 46.46928777777778 ], [ 8.513672222222223, 46.4733775 ], [ 8.514891944444445, 46.47781722222222 ], [ 8.505868611111111, 46.493295555555555 ], [ 8.492531944444444, 46.49265777777778 ], [ 8.4920825, 46.49050916666667 ], [ 8.480090833333334, 46.47963333333333 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/LSR47 VAL PIANA CAVAGNOLO"
+    }
+  } ]
+}

@@ -1,0 +1,46 @@
+{
+  "type":"FeatureCollection",
+  "name":"Vorarlberg East",
+  "description":"REST, MISC, WEF DAVOS, 56224 - Vorarlberg East",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 10.395281116672809, 47.128830876294586 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=145/ul=195/bt/et/dl/unbu/TEXT=WEF VORARLBERG EAST"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 10.177777777777777, 47.25472222222222 ], [ 10.281944444444445, 47.13722222222222 ], [ 10.393611111111111, 46.99888888888889 ], [ 10.616666666666667, 47.01833333333333 ], [ 10.550555555555556, 47.13583333333333 ], [ 10.490277777777777, 47.21194444444444 ], [ 10.177777777777777, 47.25472222222222 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/LO-R Vorarlberg East"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 10.177777777777777, 47.25472222222222 ], [ 10.281944444444445, 47.13722222222222 ], [ 10.393611111111111, 46.99888888888889 ], [ 10.616666666666667, 47.01833333333333 ], [ 10.550555555555556, 47.13583333333333 ], [ 10.490277777777777, 47.21194444444444 ], [ 10.177777777777777, 47.25472222222222 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/LO-R Vorarlberg East"
+    }
+  } ]
+}

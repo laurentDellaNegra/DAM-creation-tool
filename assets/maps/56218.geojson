@@ -1,0 +1,61 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSR39 A/B",
+  "description":"REST, RESTRICTED AREAS, PILATUS, 56218 - LSR39 A/B",
+  "extra":{
+    "mapAttribute":"RESTRICTED"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.355806307233403, 46.875724543907516 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=9000/ft/ul=130/bt/et/restricted/dl/flc/lnbu/unbu/TEXT=LSR39A/B PC24"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.227224166666666, 46.916668333333334 ], [ 8.140671666666666, 46.84870277777778 ], [ 8.3288725, 46.832433888888886 ], [ 8.530738611111111, 46.86768166666667 ], [ 8.511645833333333, 46.96288194444445 ], [ 8.340874722222223, 46.929606944444444 ], [ 8.273108888888888, 46.88350444444445 ], [ 8.24172888888889, 46.88989083333333 ], [ 8.227224166666666, 46.916668333333334 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/LSR39 A/B PILATUS\\NO BUFFER REQUIRED"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.227224166666666, 46.916668333333334 ], [ 8.140671666666666, 46.84870277777778 ], [ 8.3288725, 46.832433888888886 ], [ 8.530738611111111, 46.86768166666667 ], [ 8.511645833333333, 46.96288194444445 ], [ 8.340874722222223, 46.929606944444444 ], [ 8.273108888888888, 46.88350444444445 ], [ 8.24172888888889, 46.88989083333333 ], [ 8.227224166666666, 46.916668333333334 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/LSR39 A/B PILATUS\\NO BUFFER REQUIRED"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.340874722222223, 46.929606944444444 ], [ 8.3288725, 46.832433888888886 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "tooltipInfo":"/NETTO/LSR39 A/B PILATUS"
+    }
+  } ]
+}

@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"IGS",
+  "description":"REST, MISC, LSGS BUFFER ZONE, 56031 - IGS",
+  "extra":{
+    "mapAttribute":"OTHER"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.091666666666667, 46.48083333333334 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#dcdcdc",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=13000/ft/ul=17000/ft/other/dl/lft/flc/lnbu/APP/ARF/BUO/DUB/EMM/FIC/LAC/LUG/STG/TWR/UAC/TEXT=SION BUFFER ZONE"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 7.801388888888889, 46.51083333333333 ], [ 7.991388888888888, 46.515277777777776 ], [ 8.150555555555556, 46.388888888888886 ], [ 8.240555555555556, 46.4425 ], [ 8.045555555555556, 46.59972222222222 ], [ 7.709444444444444, 46.5925 ], [ 7.801388888888889, 46.51083333333333 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/SION BUFFER ZONE\\Lower Limit MIL ON = FL130, MIL OFF = FL150"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 7.801388888888889, 46.51083333333333 ], [ 7.991388888888888, 46.515277777777776 ], [ 8.150555555555556, 46.388888888888886 ], [ 8.240555555555556, 46.4425 ], [ 8.045555555555556, 46.59972222222222 ], [ 7.709444444444444, 46.5925 ], [ 7.801388888888889, 46.51083333333333 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/SION BUFFER ZONE\\Lower Limit MIL ON = FL130, MIL OFF = FL150"
+    }
+  } ]
+}

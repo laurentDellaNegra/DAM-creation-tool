@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"U-SPACE BETA - DO NOT USE",
+  "description":"REST, MISC, U-SPACE, 10101 - U-SPACE BETA - DO NOT USE",
+  "extra":{
+    "mapAttribute":"DANGER"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.374902590770295, 47.40119118251009 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=2500/ft/danger/qnh/unbu/TEXT=U-Space"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.33104, 47.45074 ], [ 8.34032, 47.35171 ], [ 8.57724, 47.36925 ], [ 8.57791, 47.40041 ], [ 8.46469, 47.44953 ], [ 8.33104, 47.45074 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/U-Space\\120m AGL"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.33104, 47.45074 ], [ 8.34032, 47.35171 ], [ 8.57724, 47.36925 ], [ 8.57791, 47.40041 ], [ 8.46469, 47.44953 ], [ 8.33104, 47.45074 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/U-Space\\120m AGL"
+    }
+  } ]
+}

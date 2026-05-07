@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"Drachenclub Wehntal",
+  "description":"REST, MISC, DRACHEN, 56075 - Drachenclub Wehntal",
+  "extra":{
+    "mapAttribute":"OTHER"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.425, 47.49166666666667 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#dcdcdc",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=0000/ft/ul=2200/ft/bt/et/other/TEXT=DRACHENCLUB WEHNTAL"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.4075, 47.49583333333333 ], [ 8.407222222222222, 47.49111111111111 ], [ 8.420555555555556, 47.49111111111111 ], [ 8.420555555555556, 47.495555555555555 ], [ 8.4075, 47.49583333333333 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#dcdcdc",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"DRACHENCLUB WEHNTAL"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.4075, 47.49583333333333 ], [ 8.407222222222222, 47.49111111111111 ], [ 8.420555555555556, 47.49111111111111 ], [ 8.420555555555556, 47.495555555555555 ], [ 8.4075, 47.49583333333333 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#dcdcdc",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"DRACHENCLUB WEHNTAL"
+    }
+  } ]
+}

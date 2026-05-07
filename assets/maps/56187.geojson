@@ -1,0 +1,46 @@
+{
+  "type":"FeatureCollection",
+  "name":"Thurgau Nord",
+  "description":"REST, FIRING, ANTI HAIL, 56187 - Thurgau Nord",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.160196559531299, 47.643484175360165 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=0000/ft/ul=7500/ft/bt/et/dl/uft/unbu/TEXT=ANTI HAIL FIRING THURGAU-N"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.335777222, 47.59203028 ], [ 9.182541944, 47.65754333 ], [ 9.1026925, 47.65871528 ], [ 9.034794167, 47.61469222 ], [ 9.140277778, 47.58611111 ], [ 9.232222222, 47.58916667 ], [ 9.335777222, 47.59203028 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/Anti-Hail Thurgau North"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.335777222, 47.59203028 ], [ 9.182541944, 47.65754333 ], [ 9.1026925, 47.65871528 ], [ 9.034794167, 47.61469222 ], [ 9.140277778, 47.58611111 ], [ 9.232222222, 47.58916667 ], [ 9.335777222, 47.59203028 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/Anti-Hail Thurgau North"
+    }
+  } ]
+}

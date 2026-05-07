@@ -1,0 +1,76 @@
+{
+  "type":"FeatureCollection",
+  "name":"PARA Speck",
+  "description":"REST, PARA/AEROBATICS, 56133 - PARA Speck",
+  "extra":{
+    "mapAttribute":"PARACHUTE"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 1.0972222222222223, 44.97 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#006699",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=999/parachute/TEXT=DUMMY - PARA"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.7575, 47.37638888888889 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#505150",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"LSZK",
+      "info":{
+        "elevation":1758,
+        "additionalInfos":"",
+        "name":"LSZK",
+        "description":"SPECK-FEHRALTORF",
+        "runways":[ {
+          "surface":"GRASS",
+          "lda":"625/520/18",
+          "runway":"12/30"
+        } ],
+        "frequencies":[ {
+          "onSameLine":false,
+          "name":"AD",
+          "frequency":"120.355"
+        } ]
+      },
+      "tooltipInfo":"LSZK/SPECK-FEHRALTORF\\AD: 120.355\\elevation 1758 ft\\RWY: 12/30 LDA: 625/520/18 - GRASS",
+      "symbol":"A_AERO_SYM4",
+      "symbol_type":"AIRPORT",
+      "runwaySymbol":"SYMB_ORIENT6"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.783333333333333, 47.36666666666667 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":18,
+      "color":"#006699",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"PJSPECK",
+      "symbol":"A_SYMBOL_SYM31",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"PJSPECK",
+        "coordinates":"47.22.00N  08.47.00E",
+        "description":"PARA SPECK"
+      },
+      "tooltipInfo":"PARA SPECK"
+    }
+  } ]
+}

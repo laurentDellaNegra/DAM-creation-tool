@@ -1,0 +1,66 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSME 34",
+  "description":"REST, AOR, 56240 - LSME 34",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 2.053138199770073, 44.401636759413215 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":12,
+      "color":"#dcdcdc",
+      "font":"ARIAL",
+      "remarks":"LEVEL/ll=000/ul=125/unbu/APP/ARF/BRN/DUB/EMM/FIC/LAC/LUG/STG/TWR/UAC/TEXT=DUMMY STATIC 000-125"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.439034722, 47.16533222 ], [ 8.5458575, 47.24860528 ], [ 8.615555556, 47.25861111 ], [ 8.731447778, 47.07449028 ], [ 8.778847778, 47.02291778 ], [ 8.479763611, 46.97827333 ], [ 8.455793889, 47.14262778 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":6,
+      "color":"#a98056",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"AOR EMMEN 5500ft"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.222777778, 47.24305556 ], [ 8.100555556, 47.195 ], [ 7.982206111, 47.14855583 ], [ 7.994722222, 47.13138889 ], [ 8.370540556, 47.13837389 ], [ 8.455793889, 47.14262778 ], [ 8.439034722, 47.16533222 ], [ 8.392745833, 47.22763694 ], [ 8.346388889, 47.29138889 ], [ 8.222777778, 47.24305556 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":6,
+      "color":"#a98056",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"AOR EMMEN FL85"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 8.346388889, 47.29138889 ], [ 8.391666667, 47.30777778 ], [ 8.464313889, 47.33589611 ], [ 8.552086944, 47.34245333 ], [ 8.569444444, 47.31944444 ], [ 8.589444444, 47.29305556 ], [ 8.615555556, 47.25861111 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":6,
+      "color":"#a98056",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"AOR EMMEN LOW 6500ft / HIGH 7500ft"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 7.994722222, 47.13138889 ], [ 7.937775556, 47.11247278 ], [ 7.7597, 47.01648194 ], [ 7.859957222, 46.96444139 ], [ 7.779244722, 46.92081528 ], [ 7.991486944, 46.81303667 ], [ 8.028365278, 46.82363167 ], [ 8.099586389, 46.83928806 ], [ 8.495910833, 46.86697972 ], [ 8.479763611, 46.97827333 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":6,
+      "color":"#a98056",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"AOR EMMEN FL125"
+    }
+  } ]
+}

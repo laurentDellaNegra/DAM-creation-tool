@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"L-SPACE_LSHG/LSNG",
+  "description":"REST, L-SPACE/ROUTINGS, 56276 - L-SPACE_LSHG/LSNG",
+  "extra":{
+    "mapAttribute":"OTHER"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.154136939362301, 47.33748162055247 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#2a4b58",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=6000/ft/bt/et/other/dl/uhbu/APP/ARF/BRN/BUO/DUB/EMM/FIC/LAC/LUG/TWR/UAC/TEXT=L-SPACE LSHG-LSNG-LSXO"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.419028888888889, 47.467774166666665 ], [ 9.419028888888889, 47.467774166666665 ], [ 9.1894925, 47.44749 ], [ 9.12885611111111, 47.438544722222225 ], [ 9.103111944444445, 47.40956111111111 ], [ 9.123054444444444, 47.31677694444444 ], [ 9.174227222222223, 47.313000833333334 ], [ 9.35180361111111, 47.391976944444444 ], [ 9.440025277777778, 47.44426861111111 ], [ 9.438254444444445, 47.461598611111114 ], [ 9.419028888888889, 47.467774166666665 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#2a4b58",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/L-SPACE LSHG-LSNG-LSXO"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 9.419028888888889, 47.467774166666665 ], [ 9.419028888888889, 47.467774166666665 ], [ 9.1894925, 47.44749 ], [ 9.12885611111111, 47.438544722222225 ], [ 9.103111944444445, 47.40956111111111 ], [ 9.123054444444444, 47.31677694444444 ], [ 9.174227222222223, 47.313000833333334 ], [ 9.35180361111111, 47.391976944444444 ], [ 9.440025277777778, 47.44426861111111 ], [ 9.438254444444445, 47.461598611111114 ], [ 9.419028888888889, 47.467774166666665 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#2a4b58",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/L-SPACE LSHG-LSNG-LSXO"
+    }
+  } ]
+}

@@ -1,0 +1,75 @@
+{
+  "type":"FeatureCollection",
+  "name":"PARA Reichenbach",
+  "description":"REST, PARA/AEROBATICS, 80384 - PARA Reichenbach",
+  "extra":{
+    "mapAttribute":"PARACHUTE"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 1.0972222222222223, 44.97 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#006699",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=150/parachute/TEXT=DUMMY - PARA"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.677777777777778, 46.61361111111111 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#505150",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"LSGR",
+      "info":{
+        "elevation":2380,
+        "additionalInfos":"",
+        "name":"LSGR",
+        "description":"REICHENBACH",
+        "runways":[ {
+          "surface":"CONC",
+          "lda":"700/750/40",
+          "runway":"04/22"
+        } ],
+        "frequencies":[ {
+          "onSameLine":false,
+          "name":"AD",
+          "frequency":"127.705"
+        } ]
+      },
+      "tooltipInfo":"LSGR/REICHENBACH\\AD: 127.705\\elevation 2380 ft\\RWY: 04/22 LDA: 700/750/40 - CONC",
+      "symbol":"A_AERO_SYM3",
+      "symbol_type":"AIRPORT"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 7.694166666666667, 46.620555555555555 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":18,
+      "color":"#006699",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"PJREICH",
+      "symbol":"A_SYMBOL_SYM31",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"PJREICH",
+        "coordinates":"46.37.14N  07.41.39E",
+        "description":"PARA REICHENBACH"
+      },
+      "tooltipInfo":"PARA REICHENBACH"
+    }
+  } ]
+}

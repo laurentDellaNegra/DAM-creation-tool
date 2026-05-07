@@ -1,75 +1,161 @@
-# React + TypeScript + Vite
+# DAM Creation Tool
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Rust + egui implementation of the DAM Creation Tool.
 
-Currently, two official plugins are available:
+The app targets both native desktop and web/WASM from one shared egui UI. The
+first version focuses on static predefined map creation with deterministic JSON
+export. AIXM export will be added later once the template is available.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Layout
 
-## React Compiler
-
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
-
-Note: This will impact Vite dev & build performances.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```text
+.
+├── apps/
+│   ├── native/   # desktop launcher
+│   └── web/      # Trunk/WASM launcher
+├── assets/
+│   ├── favicon.svg
+│   ├── maps/     # bundled GeoJSON static maps
+│   ├── pmtiles/  # runtime/static PMTiles assets
+│   └── templates/
+├── crates/
+│   ├── dam-core/ # domain model, validation, catalog parsing, export
+│   └── dam-egui/ # shared egui app
+├── docs/
+├── prompts/
+└── scripts/
+    └── dam       # local command runner
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Commands
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Most project commands can be launched through the local command runner:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+./scripts/dam help
 ```
+
+Common commands:
+
+```sh
+./scripts/dam setup
+./scripts/dam check
+./scripts/dam test
+./scripts/dam fmt
+./scripts/dam fmt-check
+./scripts/dam clippy
+./scripts/dam native
+./scripts/dam native-build
+./scripts/dam native-release
+./scripts/dam web
+./scripts/dam web-build
+./scripts/dam maps-refresh
+./scripts/dam maps-count
+./scripts/dam verify
+```
+
+Install the Rust WASM target for the web app:
+
+```sh
+rustup target add wasm32-unknown-unknown
+```
+
+Install Trunk for web development:
+
+```sh
+cargo install trunk
+```
+
+Check the full workspace:
+
+```sh
+cargo check --workspace
+```
+
+Run tests:
+
+```sh
+cargo test
+```
+
+Format Rust code:
+
+```sh
+cargo fmt --all
+```
+
+Run Clippy:
+
+```sh
+cargo clippy --workspace --all-targets
+```
+
+Run the native app:
+
+```sh
+cargo run -p dam-native
+```
+
+Build the native app:
+
+```sh
+cargo build -p dam-native
+```
+
+Build the native app in release mode:
+
+```sh
+cargo build -p dam-native --release
+```
+
+Run the web app locally:
+
+```sh
+cd apps/web
+trunk serve
+```
+
+Build the web app:
+
+```sh
+cd apps/web
+trunk build
+```
+
+If Trunk receives `NO_COLOR=1` from the shell and rejects it, unset that variable:
+
+```sh
+cd apps/web
+env -u NO_COLOR trunk serve
+env -u NO_COLOR trunk build
+```
+
+Refresh the selected bundled maps from the local ACWP static data checkout:
+
+```sh
+./scripts/dam maps-refresh
+```
+
+Override the source or destination if needed:
+
+```sh
+MAP_SOURCE=/path/to/maps MAP_DEST=assets/maps ./scripts/dam maps-refresh
+```
+
+Verify the bundled map count:
+
+```sh
+./scripts/dam maps-count
+```
+
+## Map Assets
+
+Place bundled static maps in `assets/maps/` as GeoJSON `FeatureCollection`
+files.
+
+Catalog rules:
+
+- Map id comes from the filename stem, for example `50714.geojson` -> `50714`.
+- Map name comes from the top-level `name`.
+- Top-level `description` is used for search/detail text.
+- Static map export includes only the map id and name, not GeoJSON geometry.

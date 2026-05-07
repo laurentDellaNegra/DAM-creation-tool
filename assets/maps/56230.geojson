@@ -1,0 +1,45 @@
+{
+  "type":"FeatureCollection",
+  "name":"AoR Laupheim",
+  "description":"REST, AOR, 56230 - AoR Laupheim",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 2.053138199770073, 44.401636759413215 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#006699",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=065/unbu/ARF/TEXT=DUMMY AOR LAUPHEIM"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.672863324041439, 48.13863385863324 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":12,
+      "color":"#007300",
+      "font":"MS Sans Serif",
+      "size":"11",
+      "text":"GND-FL065"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 10.2, 48.51777777777778 ], [ 9.808055555555555, 48.52444444444444 ], [ 9.55, 48.35 ], [ 9.55, 48.2375 ], [ 9.622777777777777, 48.013888888888886 ], [ 10.026388888888889, 48.028888888888886 ], [ 10.332222222222223, 48.14388888888889 ], [ 10.199722222222222, 48.430277777777775 ], [ 10.2, 48.51777777777778 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":24,
+      "color":"#282828",
+      "borderColor":"#2c5f00",
+      "linePattern":"PS_USERSTYLE 0505",
+      "fillPattern":"BS_PATTERN 0010001010001000001000101000100000100010100010000010001010001000",
+      "tooltipInfo":"AoR LAUPHEIM\\FL065\\GND"
+    }
+  } ]
+}

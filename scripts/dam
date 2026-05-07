@@ -1,0 +1,139 @@
+#!/usr/bin/env sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+MAP_SOURCE=${MAP_SOURCE:-/Users/laurent/work/skysoft/acwp-static-data/data/adaptationdata/skyguide/maps/CH/DUBEMMBUOSTC}
+MAP_DEST=${MAP_DEST:-$REPO_ROOT/assets/maps}
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/dam <command>
+
+Commands:
+  help            Show this help
+  setup           Install the Rust WASM target and Trunk
+  check           Run cargo check for the workspace
+  test            Run cargo test
+  fmt             Format Rust code
+  fmt-check       Check Rust formatting
+  clippy          Run Clippy for the workspace
+  native          Run the native app
+  native-build    Build the native app
+  native-release  Build the native app in release mode
+  web             Run the web app with Trunk
+  web-build       Build the web app with Trunk
+  maps-refresh    Copy selected maps from MAP_SOURCE into assets/maps
+  maps-count      Count bundled GeoJSON maps
+  verify          Run fmt-check, check, test, clippy, native-build, web-build
+
+Environment:
+  MAP_SOURCE      Source folder for maps-refresh
+  MAP_DEST        Destination folder for maps-refresh
+EOF
+}
+
+run() {
+  printf '+'
+  printf ' %s' "$@"
+  printf '\n'
+  "$@"
+}
+
+maps_refresh() {
+  if [ ! -d "$MAP_SOURCE" ]; then
+    printf 'Missing map source: %s\n' "$MAP_SOURCE" >&2
+    exit 1
+  fi
+
+  mkdir -p "$MAP_DEST"
+
+  copied=0
+  missing=0
+  for file in "$MAP_DEST"/*.geojson; do
+    [ -e "$file" ] || continue
+    name=$(basename "$file")
+    if [ ! -f "$MAP_SOURCE/$name" ]; then
+      printf 'Missing source map: %s\n' "$name" >&2
+      missing=$((missing + 1))
+      continue
+    fi
+
+    run cp -p "$MAP_SOURCE/$name" "$MAP_DEST/"
+    copied=$((copied + 1))
+  done
+
+  printf 'Copied %s map(s) into %s\n' "$copied" "$MAP_DEST"
+  if [ "$missing" -gt 0 ]; then
+    printf 'Missing %s source map(s)\n' "$missing" >&2
+    exit 1
+  fi
+}
+
+maps_count() {
+  find "$MAP_DEST" -maxdepth 1 -name '*.geojson' | wc -l | tr -d ' '
+  printf '\n'
+}
+
+command=${1:-help}
+
+case "$command" in
+  help|-h|--help)
+    usage
+    ;;
+  setup)
+    run rustup target add wasm32-unknown-unknown
+    run cargo install trunk
+    ;;
+  check)
+    run cargo check --workspace
+    ;;
+  test)
+    run cargo test
+    ;;
+  fmt)
+    run cargo fmt --all
+    ;;
+  fmt-check)
+    run cargo fmt --all -- --check
+    ;;
+  clippy)
+    run cargo clippy --workspace --all-targets
+    ;;
+  native)
+    run cargo run -p dam-native
+    ;;
+  native-build)
+    run cargo build -p dam-native
+    ;;
+  native-release)
+    run cargo build -p dam-native --release
+    ;;
+  web)
+    cd "$REPO_ROOT/apps/web"
+    run env -u NO_COLOR trunk serve
+    ;;
+  web-build)
+    cd "$REPO_ROOT/apps/web"
+    run env -u NO_COLOR trunk build
+    ;;
+  maps-refresh)
+    maps_refresh
+    ;;
+  maps-count)
+    maps_count
+    ;;
+  verify)
+    "$0" fmt-check
+    "$0" check
+    "$0" test
+    "$0" clippy
+    "$0" native-build
+    "$0" web-build
+    ;;
+  *)
+    printf 'Unknown command: %s\n\n' "$command" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

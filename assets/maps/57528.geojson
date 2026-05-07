@@ -1,0 +1,46 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSZH TMA S2+S3",
+  "description":"REST, CTR/TMA, 57528 - LSZH TMA S2+S3",
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.268162222222223, 47.18926527777778 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#dcdcdc",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=0000/ft/ul=7500/ft/bt/et/unbu/APP/ARF/BRN/BUO/DUB/EMM/FIC/LUG/STG/TWR/TEXT=ZURICH TMA S2+S3"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.745555556, 47.275 ], [ 8.615555556, 47.25861111 ], [ 8.604901389, 47.25708222 ], [ 8.4375, 47.23305556 ], [ 8.492222222, 47.14444444 ], [ 8.618611111, 47.15527778 ], [ 8.648888889, 47.16416667 ], [ 8.895, 47.19527778 ], [ 8.923888889, 47.21777778 ], [ 8.973888889, 47.25555556 ], [ 8.918611111, 47.26027778 ], [ 8.773866667, 47.27259167 ], [ 8.745555556, 47.275 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":24,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0010001010001000001000101000100000100010100010000010001010001000",
+      "tooltipInfo":"LSZH TMA\\5500ft"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.4375, 47.23305556 ], [ 8.259444444, 47.21138889 ], [ 7.994722222, 47.13138889 ], [ 8.370555556, 47.13833333 ], [ 8.492222222, 47.14444444 ], [ 8.4375, 47.23305556 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":24,
+      "color":"#282828",
+      "borderColor":"#666666",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_PATTERN 0010001010001000001000101000100000100010100010000010001010001000",
+      "tooltipInfo":"LSZH TMA\\7500ft"
+    }
+  } ]
+}

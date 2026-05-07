@@ -1,0 +1,100 @@
+{
+  "type":"FeatureCollection",
+  "name":"PARA Hohenems",
+  "description":"REST, PARA/AEROBATICS, 56110 - PARA Hohenems",
+  "extra":{
+    "mapAttribute":"PARACHUTE"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 1.0972222222222223, 44.97 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#006699",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=000/ul=999/parachute/TEXT=DUMMY - PARA"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.700555555555555, 47.38527777777778 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":4,
+      "color":"#505150",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"LOIH",
+      "info":{
+        "elevation":1352,
+        "additionalInfos":"",
+        "name":"LOIH",
+        "description":"HOHENEMS",
+        "runways":[ {
+          "surface":"ASPH",
+          "lda":"590/630/18",
+          "runway":"04/22"
+        } ],
+        "frequencies":[ {
+          "onSameLine":false,
+          "name":"AD",
+          "frequency":"121.205"
+        } ]
+      },
+      "tooltipInfo":"LOIH/HOHENEMS\\AD: 121.205\\elevation 1352 ft\\RWY: 04/22 LDA: 590/630/18 - ASPH",
+      "symbol":"A_AERO_SYM3",
+      "symbol_type":"AIRPORT",
+      "runwaySymbol":"SYMB_ORIENT13"
+    }
+  }, {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 9.7625, 47.38333333333333 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":18,
+      "color":"#006699",
+      "font":"GraphicsGva",
+      "size":200,
+      "description":"Z4131",
+      "symbol":"A_SYMBOL_SYM31",
+      "symbol_type":"WAYPOINT",
+      "info":{
+        "additionalInfos":"",
+        "name":"Z4131",
+        "coordinates":"47.23.00N  09.45.45E",
+        "description":"PARA HOHENEMS"
+      },
+      "tooltipInfo":"PARA HOHENEMS"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 9.65815858742607, 47.406435593982145 ], [ 9.658611111111112, 47.41777777777778 ], [ 9.855833333333333, 47.40138888888889 ], [ 9.854008321488896, 47.355474237183905 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#006699",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"/NETTO/PARA HOHENEMS"
+    }
+  }, {
+    "geometry":{
+      "type":"LineString",
+      "coordinates":[ [ 9.65815861111111, 47.406435555555554 ], [ 9.658611111111112, 47.41777777777778 ], [ 9.855833333333333, 47.40138888888889 ], [ 9.854008333333333, 47.35547416666667 ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#006699",
+      "linePattern":"PS_SOLID",
+      "tooltipInfo":"/BUFFER/PARA HOHENEMS"
+    }
+  } ]
+}

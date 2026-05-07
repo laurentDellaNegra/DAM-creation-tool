@@ -1,0 +1,49 @@
+{
+  "type":"FeatureCollection",
+  "name":"LSD12 Sihltal",
+  "description":"REST, DANGER AREAS, 56150 - LSD12 Sihltal",
+  "extra":{
+    "mapAttribute":"DANGER"
+  },
+  "features":[ {
+    "geometry":{
+      "type":"Point",
+      "coordinates":[ 8.85778564280579, 47.04134675536728 ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":15,
+      "color":"#af1b1b",
+      "font":"MS Sans Serif",
+      "remarks":"LEVEL/ll=0000/ft/ul=9850/ft/bt/et/danger/dl/flc/unbu/TEXT=LSD12 SIHLTAL"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.887777777777778, 47.048611111111114 ], [ 8.876666666666667, 47.05694444444445 ], [ 8.851666666666667, 47.05694444444445 ], [ 8.837777777777777, 47.05416666666667 ], [ 8.837777777777777, 46.99861111111111 ], [ 8.857222222222223, 46.99861111111111 ], [ 8.887777777777778, 47.048611111111114 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_DOT",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/NETTO/LSD12 SIHLTAL"
+    }
+  }, {
+    "geometry":{
+      "type":"Polygon",
+      "coordinates":[ [ [ 8.887777777777778, 47.048611111111114 ], [ 8.876666666666667, 47.05694444444445 ], [ 8.851666666666667, 47.05694444444445 ], [ 8.837777777777777, 47.05416666666667 ], [ 8.837777777777777, 46.99861111111111 ], [ 8.857222222222223, 46.99861111111111 ], [ 8.887777777777778, 47.048611111111114 ] ] ]
+    },
+    "type":"Feature",
+    "properties":{
+      "priority":21,
+      "color":"#0e1616",
+      "borderColor":"#af1b1b",
+      "linePattern":"PS_SOLID",
+      "fillPattern":"BS_SOLID",
+      "tooltipInfo":"/BUFFER/LSD12 SIHLTAL"
+    }
+  } ]
+}

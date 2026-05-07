@@ -1,0 +1,26 @@
+[package]
+name = "dam-egui"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+dam-core.workspace = true
+eframe.workspace = true
+egui.workspace = true
+js-sys.workspace = true
+log.workspace = true
+serde_json.workspace = true
+walkers.workspace = true
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = [
+  "Blob",
+  "BlobPropertyBag",
+  "Document",
+  "Element",
+  "HtmlAnchorElement",
+  "Url",
+  "Window",
+] }
+
