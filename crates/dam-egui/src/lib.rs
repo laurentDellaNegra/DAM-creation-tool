@@ -3,9 +3,9 @@ mod platform;
 mod preview;
 
 use crate::form::{
-    CoordinateFieldState, DamFormState, LevelFieldState, ManualGeometryType, MapMode,
-    PeriodRowState, PieCircleDraftState, PieClickTarget, PolygonDraftState, StripClickTarget,
-    StripDraftState, TextNumberDraftState,
+    ArcDraftState, ClickTarget, CoordinateFieldState, DamFormState, LevelFieldState,
+    ManualGeometryType, MapMode, PeriodRowState, PieCircleDraftState, PolygonDraftState,
+    PolygonNodeDraft, StripDraftState, TextNumberDraftState, geometry_supports_buffer,
 };
 use crate::preview::PreviewOverlay;
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime};
@@ -36,6 +36,8 @@ pub struct DamApp {
     diagnostics_open: bool,
     validation_issues: Vec<ValidationIssue>,
     status: Option<String>,
+    pending_click_target: Option<ClickTarget>,
+    previous_active_geometry: Option<ManualGeometryType>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -87,6 +89,8 @@ impl DamApp {
             diagnostics_open: false,
             validation_issues: Vec::new(),
             status: None,
+            pending_click_target: None,
+            previous_active_geometry: None,
         }
     }
 }
@@ -94,6 +98,8 @@ impl DamApp {
 impl eframe::App for DamApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.form.sync_weekdays_from_dates();
+        self.maybe_auto_focus_on_geometry_change(ui.ctx());
+        self.update_click_target_from_memory(ui.ctx());
 
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(APP_BG))
@@ -144,7 +150,203 @@ fn center_map_on_preview(
     }
 }
 
+fn polygon_point_lat_id(i: usize) -> egui::Id {
+    egui::Id::new(("polygon-point-lat", i))
+}
+fn polygon_point_lon_id(i: usize) -> egui::Id {
+    egui::Id::new(("polygon-point-lon", i))
+}
+fn polygon_arc_center_lat_id(i: usize) -> egui::Id {
+    egui::Id::new(("polygon-arc-center-lat", i))
+}
+fn polygon_arc_center_lon_id(i: usize) -> egui::Id {
+    egui::Id::new(("polygon-arc-center-lon", i))
+}
+fn polygon_arc_radius_id(i: usize) -> egui::Id {
+    egui::Id::new(("polygon-arc-radius", i))
+}
+fn polygon_label_lat_id() -> egui::Id {
+    egui::Id::new("polygon-label-lat")
+}
+fn polygon_label_lon_id() -> egui::Id {
+    egui::Id::new("polygon-label-lon")
+}
+fn para_lat_id() -> egui::Id {
+    egui::Id::new("para-lat")
+}
+fn para_lon_id() -> egui::Id {
+    egui::Id::new("para-lon")
+}
+fn text_number_lat_id() -> egui::Id {
+    egui::Id::new("text-number-lat")
+}
+fn text_number_lon_id() -> egui::Id {
+    egui::Id::new("text-number-lon")
+}
+fn pie_center_lat_id() -> egui::Id {
+    egui::Id::new("pie-center-lat")
+}
+fn pie_center_lon_id() -> egui::Id {
+    egui::Id::new("pie-center-lon")
+}
+fn pie_radius_id() -> egui::Id {
+    egui::Id::new("pie-radius")
+}
+fn pie_label_lat_id() -> egui::Id {
+    egui::Id::new("pie-label-lat")
+}
+fn pie_label_lon_id() -> egui::Id {
+    egui::Id::new("pie-label-lon")
+}
+fn strip_point1_lat_id() -> egui::Id {
+    egui::Id::new("strip-point1-lat")
+}
+fn strip_point1_lon_id() -> egui::Id {
+    egui::Id::new("strip-point1-lon")
+}
+fn strip_point2_lat_id() -> egui::Id {
+    egui::Id::new("strip-point2-lat")
+}
+fn strip_point2_lon_id() -> egui::Id {
+    egui::Id::new("strip-point2-lon")
+}
+fn strip_width_id() -> egui::Id {
+    egui::Id::new("strip-width")
+}
+fn strip_label_lat_id() -> egui::Id {
+    egui::Id::new("strip-label-lat")
+}
+fn strip_label_lon_id() -> egui::Id {
+    egui::Id::new("strip-label-lon")
+}
+
+fn click_target_from_id(id: egui::Id, polygon: &PolygonDraftState) -> Option<ClickTarget> {
+    if id == polygon_label_lat_id() || id == polygon_label_lon_id() {
+        return Some(ClickTarget::PolygonLabel);
+    }
+    for i in 0..polygon.nodes.len() {
+        match polygon.nodes[i] {
+            PolygonNodeDraft::Point(_) => {
+                if id == polygon_point_lat_id(i) || id == polygon_point_lon_id(i) {
+                    return Some(ClickTarget::PolygonPoint(i));
+                }
+            }
+            PolygonNodeDraft::Arc(_) => {
+                if id == polygon_arc_center_lat_id(i) || id == polygon_arc_center_lon_id(i) {
+                    return Some(ClickTarget::PolygonArcCenter(i));
+                }
+                if id == polygon_arc_radius_id(i) {
+                    return Some(ClickTarget::PolygonArcRadius(i));
+                }
+            }
+        }
+    }
+    if id == para_lat_id() || id == para_lon_id() {
+        return Some(ClickTarget::ParaSymbolPoint);
+    }
+    if id == text_number_lat_id() || id == text_number_lon_id() {
+        return Some(ClickTarget::TextNumberPoint);
+    }
+    if id == pie_center_lat_id() || id == pie_center_lon_id() {
+        return Some(ClickTarget::PieCenter);
+    }
+    if id == pie_radius_id() {
+        return Some(ClickTarget::PieRadius);
+    }
+    if id == pie_label_lat_id() || id == pie_label_lon_id() {
+        return Some(ClickTarget::PieLabel);
+    }
+    if id == strip_point1_lat_id() || id == strip_point1_lon_id() {
+        return Some(ClickTarget::StripPoint1);
+    }
+    if id == strip_point2_lat_id() || id == strip_point2_lon_id() {
+        return Some(ClickTarget::StripPoint2);
+    }
+    if id == strip_width_id() {
+        return Some(ClickTarget::StripWidth);
+    }
+    if id == strip_label_lat_id() || id == strip_label_lon_id() {
+        return Some(ClickTarget::StripLabel);
+    }
+    None
+}
+
+fn click_target_widget_ids(target: ClickTarget) -> Vec<egui::Id> {
+    match target {
+        ClickTarget::PolygonPoint(i) => vec![polygon_point_lat_id(i), polygon_point_lon_id(i)],
+        ClickTarget::PolygonArcCenter(i) => {
+            vec![polygon_arc_center_lat_id(i), polygon_arc_center_lon_id(i)]
+        }
+        ClickTarget::PolygonArcRadius(i) => vec![polygon_arc_radius_id(i)],
+        ClickTarget::PolygonLabel => vec![polygon_label_lat_id(), polygon_label_lon_id()],
+        ClickTarget::ParaSymbolPoint => vec![para_lat_id(), para_lon_id()],
+        ClickTarget::TextNumberPoint => vec![text_number_lat_id(), text_number_lon_id()],
+        ClickTarget::PieCenter => vec![pie_center_lat_id(), pie_center_lon_id()],
+        ClickTarget::PieRadius => vec![pie_radius_id()],
+        ClickTarget::PieLabel => vec![pie_label_lat_id(), pie_label_lon_id()],
+        ClickTarget::StripPoint1 => vec![strip_point1_lat_id(), strip_point1_lon_id()],
+        ClickTarget::StripPoint2 => vec![strip_point2_lat_id(), strip_point2_lon_id()],
+        ClickTarget::StripWidth => vec![strip_width_id()],
+        ClickTarget::StripLabel => vec![strip_label_lat_id(), strip_label_lon_id()],
+    }
+}
+
 impl DamApp {
+    fn update_click_target_from_memory(&mut self, ctx: &egui::Context) {
+        let focused_id = ctx.memory(|m| m.focused());
+        match focused_id.and_then(|id| click_target_from_id(id, &self.form.manual.polygon)) {
+            Some(target) => self.pending_click_target = Some(target),
+            None => {
+                if focused_id.is_some() {
+                    self.pending_click_target = None;
+                }
+            }
+        }
+    }
+
+    fn surrender_click_target_focus(&self, ctx: &egui::Context, target: ClickTarget) {
+        let ids = click_target_widget_ids(target);
+        ctx.memory_mut(|m| {
+            for id in ids {
+                m.surrender_focus(id);
+            }
+        });
+    }
+
+    fn maybe_auto_focus_on_geometry_change(&mut self, ctx: &egui::Context) {
+        let active = if self.form.map_mode == MapMode::Manual {
+            Some(self.form.manual.geometry_type)
+        } else {
+            None
+        };
+        if active == self.previous_active_geometry {
+            return;
+        }
+        self.previous_active_geometry = active;
+        let Some(geom) = active else {
+            return;
+        };
+        let target = match geom {
+            ManualGeometryType::Polygon => {
+                if self.form.manual.polygon.nodes.is_empty() {
+                    self.form
+                        .manual
+                        .polygon
+                        .nodes
+                        .push(PolygonNodeDraft::Point(CoordinateFieldState::default()));
+                }
+                ClickTarget::PolygonPoint(0)
+            }
+            ManualGeometryType::ParaSymbol => ClickTarget::ParaSymbolPoint,
+            ManualGeometryType::TextNumber => ClickTarget::TextNumberPoint,
+            ManualGeometryType::PieCircle => ClickTarget::PieCenter,
+            ManualGeometryType::Strip => ClickTarget::StripPoint1,
+        };
+        if let Some(first_id) = click_target_widget_ids(target).into_iter().next() {
+            ctx.memory_mut(|m| m.request_focus(first_id));
+        }
+    }
+
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.heading("DAM Creation Tool");
@@ -366,10 +568,18 @@ impl DamApp {
 
         ui.add_space(8.0);
         Self::inset_panel(ui, |ui| match self.form.manual.geometry_type {
-            ManualGeometryType::Polygon => manual_polygon_ui(ui, &mut self.form.manual.polygon),
+            ManualGeometryType::Polygon => {
+                manual_polygon_ui(ui, &mut self.form.manual.polygon);
+            }
             ManualGeometryType::ParaSymbol => {
                 ui.strong("Para symbol point");
-                coordinate_field_ui(ui, "Position", &mut self.form.manual.para_symbol.point);
+                coordinate_field_ui_with_ids(
+                    ui,
+                    "Position",
+                    &mut self.form.manual.para_symbol.point,
+                    para_lat_id(),
+                    para_lon_id(),
+                );
             }
             ManualGeometryType::TextNumber => {
                 manual_text_number_ui(ui, &mut self.form.manual.text_number);
@@ -384,6 +594,7 @@ impl DamApp {
 
         ui.add_space(8.0);
         ui.strong("Map attributes");
+        let geometry_type = self.form.manual.geometry_type;
         Self::inset_panel(ui, |ui| {
             ui.label("Map category");
             ui.horizontal_wrapped(|ui| {
@@ -409,11 +620,15 @@ impl DamApp {
                 }
             });
 
-            ui.label("Lateral buffer (NM)");
-            ui.add(
-                egui::TextEdit::singleline(&mut self.form.manual.attributes.lateral_buffer_nm)
+            if geometry_supports_buffer(geometry_type) {
+                ui.label("Lateral buffer (NM)");
+                ui.add(
+                    egui::TextEdit::singleline(
+                        &mut self.form.manual.attributes.lateral_buffer_nm,
+                    )
                     .desired_width(96.0),
-            );
+                );
+            }
         });
     }
 
@@ -710,7 +925,11 @@ impl DamApp {
             } else {
                 manual_map.name.as_str()
             });
-            ui.label("Click the preview to edit the active manual geometry.");
+            if self.pending_click_target.is_some() {
+                ui.label("Click the preview to fill the focused field.");
+            } else {
+                ui.label("Focus a coordinate or distance field to enable map placement.");
+            }
         } else {
             ui.strong("Switzerland country border");
             ui.label("No DAM map selected.");
@@ -740,20 +959,39 @@ impl DamApp {
             None
         };
 
+        let manual_mode = self.form.map_mode == MapMode::Manual;
+        let click_target = self.pending_click_target;
+        let level_label_text = self.current_level_label();
+        let next_click = if manual_mode {
+            click_target.map(|target| self.form.manual.next_click_info(target, &level_label_text))
+        } else {
+            None
+        };
+
+        let cursor_preview = if manual_mode {
+            click_target.map(|target| (self.form.manual.clone(), target))
+        } else {
+            None
+        };
+
         let overlay = PreviewOverlay::new(
             self.default_preview.paths.clone(),
             selected_paths,
             manual_map,
             level_label,
+            next_click,
+            cursor_preview,
+            Some(level_label_text.clone()),
+            self.form.display_levels,
         );
         let mut clicked_coordinate = None;
-        let manual_mode = self.form.map_mode == MapMode::Manual;
         walkers::Map::new(None, &mut self.map_memory, center)
             .zoom_with_ctrl(false)
             .double_click_to_zoom(true)
             .with_plugin(overlay)
             .show(ui, |_ui, response, projector, _memory| {
                 if manual_mode
+                    && click_target.is_some()
                     && response.clicked_by(egui::PointerButton::Primary)
                     && let Some(pointer_position) = response.interact_pointer_pos()
                 {
@@ -765,12 +1003,22 @@ impl DamApp {
                 }
             });
 
-        if let Some(coordinate) = clicked_coordinate
-            && !self.form.manual.apply_click(coordinate)
-        {
-            self.status = Some(format!(
-                "Polygon point limit reached ({MAX_POLYGON_POINTS} points)."
-            ));
+        if let (Some(coord), Some(target)) = (clicked_coordinate, click_target) {
+            self.form.manual.apply_click_target(target, coord);
+            match self.form.manual.next_click_target_after(target) {
+                Some(next_target) => {
+                    self.pending_click_target = Some(next_target);
+                    if let Some(first_id) =
+                        click_target_widget_ids(next_target).into_iter().next()
+                    {
+                        ui.ctx().memory_mut(|m| m.request_focus(first_id));
+                    }
+                }
+                None => {
+                    self.pending_click_target = None;
+                    self.surrender_click_target_focus(ui.ctx(), target);
+                }
+            }
         }
     }
 
@@ -1006,65 +1254,139 @@ fn manual_polygon_ui(ui: &mut egui::Ui, polygon: &mut PolygonDraftState) {
     ui.horizontal(|ui| {
         ui.strong(format!(
             "Point list ({} / {MAX_POLYGON_POINTS})",
-            polygon.points.len()
+            polygon.nodes.len()
         ));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_enabled(false, egui::Button::new("Add Arc"))
-                .on_disabled_hover_text("Arc rows are deferred.");
-            let add_enabled = polygon.points.len() < MAX_POLYGON_POINTS;
+            let add_enabled = polygon.nodes.len() < MAX_POLYGON_POINTS;
+            if ui
+                .add_enabled(add_enabled, egui::Button::new("Add Arc"))
+                .clicked()
+            {
+                polygon
+                    .nodes
+                    .push(PolygonNodeDraft::Arc(ArcDraftState::default()));
+                let new_index = polygon.nodes.len() - 1;
+                ui.memory_mut(|m| m.request_focus(polygon_arc_center_lat_id(new_index)));
+            }
             if ui
                 .add_enabled(add_enabled, egui::Button::new("Add Point"))
                 .clicked()
             {
-                polygon.points.push(CoordinateFieldState::default());
+                polygon
+                    .nodes
+                    .push(PolygonNodeDraft::Point(CoordinateFieldState::default()));
+                let new_index = polygon.nodes.len() - 1;
+                ui.memory_mut(|m| m.request_focus(polygon_point_lat_id(new_index)));
             }
         });
     });
 
-    if polygon.points.is_empty() {
+    if polygon.nodes.is_empty() {
         ui.colored_label(
             egui::Color32::LIGHT_YELLOW,
-            "Click the preview or add point rows.",
+            "Use \"Add Point\" or \"Add Arc\", then click the map to place.",
         );
     }
 
     let mut remove_index = None;
-    let mut insert_after = None;
-    for index in 0..polygon.points.len() {
+    let mut insert_point_after = None;
+    let mut insert_arc_after = None;
+    let mut point_seen = 0usize;
+    let mut arc_seen = 0usize;
+
+    for index in 0..polygon.nodes.len() {
         ui.separator();
+        let is_arc = matches!(polygon.nodes[index], PolygonNodeDraft::Arc(_));
+        let row_label = if is_arc {
+            arc_seen += 1;
+            format!("Center {arc_seen}")
+        } else {
+            point_seen += 1;
+            format!("Point {point_seen}")
+        };
+
         ui.horizontal(|ui| {
-            ui.strong(format!("Point {}", index + 1));
+            ui.strong(row_label);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Remove").clicked() {
                     remove_index = Some(index);
                 }
-                let insert_enabled = polygon.points.len() < MAX_POLYGON_POINTS;
+                let insert_enabled = polygon.nodes.len() < MAX_POLYGON_POINTS;
                 if ui
-                    .add_enabled(insert_enabled, egui::Button::new("Insert after"))
+                    .add_enabled(insert_enabled, egui::Button::new("Insert Arc"))
                     .clicked()
                 {
-                    insert_after = Some(index);
+                    insert_arc_after = Some(index);
                 }
-                ui.add_enabled(false, egui::Button::new("Insert Arc"))
-                    .on_disabled_hover_text("Arc rows are deferred.");
+                if ui
+                    .add_enabled(insert_enabled, egui::Button::new("Insert Point"))
+                    .clicked()
+                {
+                    insert_point_after = Some(index);
+                }
             });
         });
-        coordinate_field_ui(ui, "", &mut polygon.points[index]);
+        match &mut polygon.nodes[index] {
+            PolygonNodeDraft::Point(field) => {
+                coordinate_field_ui_with_ids(
+                    ui,
+                    "",
+                    field,
+                    polygon_point_lat_id(index),
+                    polygon_point_lon_id(index),
+                );
+            }
+            PolygonNodeDraft::Arc(arc) => {
+                coordinate_field_ui_with_ids(
+                    ui,
+                    "Center",
+                    &mut arc.center,
+                    polygon_arc_center_lat_id(index),
+                    polygon_arc_center_lon_id(index),
+                );
+                ui.label("Radius (NM)");
+                numeric_field_ui_with_id(ui, &mut arc.radius_nm, polygon_arc_radius_id(index), 96.0);
+            }
+        }
     }
 
-    if let Some(index) = insert_after {
+    if let Some(index) = insert_point_after {
+        polygon.nodes.insert(
+            index + 1,
+            PolygonNodeDraft::Point(CoordinateFieldState::default()),
+        );
+        ui.memory_mut(|m| m.request_focus(polygon_point_lat_id(index + 1)));
+    }
+    if let Some(index) = insert_arc_after {
         polygon
-            .points
-            .insert(index + 1, CoordinateFieldState::default());
+            .nodes
+            .insert(index + 1, PolygonNodeDraft::Arc(ArcDraftState::default()));
+        ui.memory_mut(|m| m.request_focus(polygon_arc_center_lat_id(index + 1)));
     }
     if let Some(index) = remove_index {
-        polygon.points.remove(index);
+        polygon.nodes.remove(index);
     }
+
+    ui.separator();
+    ui.label("Label position (optional)");
+    coordinate_field_ui_with_ids(
+        ui,
+        "",
+        &mut polygon.label,
+        polygon_label_lat_id(),
+        polygon_label_lon_id(),
+    );
 }
 
 fn manual_text_number_ui(ui: &mut egui::Ui, text_number: &mut TextNumberDraftState) {
     ui.strong("Text and number point");
-    coordinate_field_ui(ui, "Position", &mut text_number.point);
+    coordinate_field_ui_with_ids(
+        ui,
+        "Position",
+        &mut text_number.point,
+        text_number_lat_id(),
+        text_number_lon_id(),
+    );
     ui.label(format!("Text ({} / 25)", text_number.text.chars().count()));
     ui.add(egui::TextEdit::singleline(&mut text_number.text).desired_width(f32::INFINITY));
 
@@ -1085,11 +1407,17 @@ fn manual_text_number_ui(ui: &mut egui::Ui, text_number: &mut TextNumberDraftSta
 
 fn manual_pie_circle_ui(ui: &mut egui::Ui, pie: &mut PieCircleDraftState) {
     ui.strong("Pie / circle");
-    coordinate_field_ui(ui, "Center", &mut pie.center);
+    coordinate_field_ui_with_ids(
+        ui,
+        "Center",
+        &mut pie.center,
+        pie_center_lat_id(),
+        pie_center_lon_id(),
+    );
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.label("Radius (NM)");
-            ui.add(egui::TextEdit::singleline(&mut pie.radius_nm).desired_width(96.0));
+            numeric_field_ui_with_id(ui, &mut pie.radius_nm, pie_radius_id(), 96.0);
         });
         ui.vertical(|ui| {
             ui.label("First angle");
@@ -1101,43 +1429,122 @@ fn manual_pie_circle_ui(ui: &mut egui::Ui, pie: &mut PieCircleDraftState) {
         });
     });
 
-    ui.label("Preview click target");
-    ui.horizontal(|ui| {
-        for target in [PieClickTarget::Center, PieClickTarget::Radius] {
-            selectable_enum(ui, &mut pie.click_target, target, target.label());
-        }
-    });
+    ui.separator();
+    ui.label("Label position (optional)");
+    coordinate_field_ui_with_ids(
+        ui,
+        "",
+        &mut pie.label,
+        pie_label_lat_id(),
+        pie_label_lon_id(),
+    );
 }
 
 fn manual_strip_ui(ui: &mut egui::Ui, strip: &mut StripDraftState) {
     ui.strong("Strip corridor");
-    coordinate_field_ui(ui, "Point 1", &mut strip.point1);
-    coordinate_field_ui(ui, "Point 2", &mut strip.point2);
+    coordinate_field_ui_with_ids(
+        ui,
+        "Point 1",
+        &mut strip.point1,
+        strip_point1_lat_id(),
+        strip_point1_lon_id(),
+    );
+    coordinate_field_ui_with_ids(
+        ui,
+        "Point 2",
+        &mut strip.point2,
+        strip_point2_lat_id(),
+        strip_point2_lon_id(),
+    );
     ui.label("Width (NM)");
-    ui.add(egui::TextEdit::singleline(&mut strip.width_nm).desired_width(96.0));
+    numeric_field_ui_with_id(ui, &mut strip.width_nm, strip_width_id(), 96.0);
 
-    ui.label("Preview click target");
-    ui.horizontal(|ui| {
-        for target in [StripClickTarget::Point1, StripClickTarget::Point2] {
-            selectable_enum(ui, &mut strip.click_target, target, target.label());
-        }
-    });
+    ui.separator();
+    ui.label("Label position (optional)");
+    coordinate_field_ui_with_ids(
+        ui,
+        "",
+        &mut strip.label,
+        strip_label_lat_id(),
+        strip_label_lon_id(),
+    );
 }
 
-fn coordinate_field_ui(ui: &mut egui::Ui, label: &str, coordinate: &mut CoordinateFieldState) {
+const FOCUS_HIGHLIGHT: egui::Color32 = egui::Color32::from_rgb(255, 200, 80);
+
+fn coordinate_field_ui_with_ids(
+    ui: &mut egui::Ui,
+    label: &str,
+    coordinate: &mut CoordinateFieldState,
+    lat_id: egui::Id,
+    lon_id: egui::Id,
+) {
     if !label.is_empty() {
         ui.label(label);
     }
-    ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            ui.label("Latitude");
-            ui.add(egui::TextEdit::singleline(&mut coordinate.lat).desired_width(104.0));
-        });
-        ui.vertical(|ui| {
-            ui.label("Longitude");
-            ui.add(egui::TextEdit::singleline(&mut coordinate.lon).desired_width(104.0));
-        });
-    });
+    let (any_focused, combined_rect) = ui
+        .horizontal(|ui| {
+            let mut focused = false;
+            let mut combined: Option<egui::Rect> = None;
+            ui.vertical(|ui| {
+                ui.label("Latitude");
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut coordinate.lat)
+                        .id(lat_id)
+                        .desired_width(104.0),
+                );
+                if r.has_focus() {
+                    focused = true;
+                }
+                combined = Some(r.rect);
+            });
+            ui.vertical(|ui| {
+                ui.label("Longitude");
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut coordinate.lon)
+                        .id(lon_id)
+                        .desired_width(104.0),
+                );
+                if r.has_focus() {
+                    focused = true;
+                }
+                combined = Some(match combined {
+                    Some(prev) => prev.union(r.rect),
+                    None => r.rect,
+                });
+            });
+            (focused, combined)
+        })
+        .inner;
+    if let (true, Some(rect)) = (any_focused, combined_rect) {
+        ui.painter().rect_stroke(
+            rect.expand(3.0),
+            4.0,
+            egui::Stroke::new(2.0, FOCUS_HIGHLIGHT),
+            egui::StrokeKind::Outside,
+        );
+    }
+}
+
+fn numeric_field_ui_with_id(
+    ui: &mut egui::Ui,
+    value: &mut String,
+    id: egui::Id,
+    width: f32,
+) {
+    let response = ui.add(
+        egui::TextEdit::singleline(value)
+            .id(id)
+            .desired_width(width),
+    );
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            response.rect.expand(3.0),
+            4.0,
+            egui::Stroke::new(2.0, FOCUS_HIGHLIGHT),
+            egui::StrokeKind::Outside,
+        );
+    }
 }
 
 fn selectable_enum<T: Copy + PartialEq>(ui: &mut egui::Ui, value: &mut T, option: T, label: &str) {

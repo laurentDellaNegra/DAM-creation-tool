@@ -44,7 +44,7 @@ pub struct ManualMap {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ManualGeometry {
     Polygon {
-        points: Vec<crate::Coordinate>,
+        nodes: Vec<PolygonNode>,
     },
     ParaSymbol {
         point: Option<crate::Coordinate>,
@@ -66,6 +66,121 @@ pub enum ManualGeometry {
         point2: Option<crate::Coordinate>,
         width_nm: Option<f64>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PolygonNode {
+    Point {
+        coordinate: crate::Coordinate,
+    },
+    Arc {
+        center: crate::Coordinate,
+        radius_nm: f64,
+    },
+}
+
+impl PolygonNode {
+    pub fn point(coordinate: crate::Coordinate) -> Self {
+        Self::Point { coordinate }
+    }
+
+    pub fn point_coordinate(&self) -> Option<crate::Coordinate> {
+        match self {
+            Self::Point { coordinate } => Some(*coordinate),
+            Self::Arc { .. } => None,
+        }
+    }
+}
+
+/// Expand a list of polygon nodes into a flat list of coordinates by sampling
+/// arcs between their adjacent point anchors.
+pub fn expand_polygon_nodes(nodes: &[PolygonNode]) -> Vec<crate::Coordinate> {
+    let n = nodes.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let mut result: Vec<crate::Coordinate> = Vec::new();
+    for i in 0..n {
+        match &nodes[i] {
+            PolygonNode::Point { coordinate } => result.push(*coordinate),
+            PolygonNode::Arc { center, radius_nm } => {
+                let prev_anchor = adjacent_anchor(nodes, i, false);
+                let next_anchor = adjacent_anchor(nodes, i, true);
+                if let (Some(prev), Some(next)) = (prev_anchor, next_anchor) {
+                    let start_angle = bearing_deg(*center, prev);
+                    let end_angle = bearing_deg(*center, next);
+                    let span = shorter_arc_span(start_angle, end_angle);
+                    let segments: usize = 24;
+                    for k in 1..segments {
+                        let t = k as f64 / segments as f64;
+                        let angle = start_angle + span * t;
+                        result.push(destination_point(*center, angle, *radius_nm));
+                    }
+                }
+            }
+        }
+    }
+    result
+}
+
+fn adjacent_anchor(nodes: &[PolygonNode], from: usize, forward: bool) -> Option<crate::Coordinate> {
+    let n = nodes.len();
+    if n == 0 {
+        return None;
+    }
+    let mut idx = from;
+    for _ in 0..n {
+        idx = if forward {
+            (idx + 1) % n
+        } else {
+            (idx + n - 1) % n
+        };
+        if let PolygonNode::Point { coordinate } = nodes[idx] {
+            return Some(coordinate);
+        }
+    }
+    None
+}
+
+fn shorter_arc_span(start_deg: f64, end_deg: f64) -> f64 {
+    let mut diff = end_deg - start_deg;
+    while diff > 180.0 {
+        diff -= 360.0;
+    }
+    while diff < -180.0 {
+        diff += 360.0;
+    }
+    diff
+}
+
+fn bearing_deg(from: crate::Coordinate, to: crate::Coordinate) -> f64 {
+    let lat1 = from.lat.to_radians();
+    let lat2 = to.lat.to_radians();
+    let dlon = (to.lon - from.lon).to_radians();
+    let y = dlon.sin() * lat2.cos();
+    let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * dlon.cos();
+    y.atan2(x).to_degrees()
+}
+
+fn destination_point(
+    origin: crate::Coordinate,
+    bearing_deg: f64,
+    distance_nm: f64,
+) -> crate::Coordinate {
+    const EARTH_RADIUS_NM: f64 = 3440.065;
+    let angular = distance_nm / EARTH_RADIUS_NM;
+    let bearing = bearing_deg.to_radians();
+    let lat1 = origin.lat.to_radians();
+    let lon1 = origin.lon.to_radians();
+    let lat2 = (lat1.sin() * angular.cos() + lat1.cos() * angular.sin() * bearing.cos()).asin();
+    let lon2 = lon1
+        + (bearing.sin() * angular.sin() * lat1.cos())
+            .atan2(angular.cos() - lat1.sin() * lat2.sin());
+    crate::Coordinate {
+        lon: lon2.to_degrees(),
+        lat: lat2.to_degrees(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,5 +1,5 @@
 use crate::{
-    DamCreation, DamMap, LevelUnit, ManualGeometry, ManualMap, ManualMapAttributes,
+    DamCreation, DamMap, LevelUnit, ManualGeometry, ManualMap, ManualMapAttributes, PolygonNode,
     ValidationError, validate_creation,
 };
 use serde::Serialize;
@@ -133,7 +133,7 @@ impl From<&ManualMap> for ExportMap {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ExportManualGeometry {
     Polygon {
-        points: Vec<crate::Coordinate>,
+        nodes: Vec<PolygonNode>,
     },
     ParaSymbol {
         point: crate::Coordinate,
@@ -160,8 +160,8 @@ pub enum ExportManualGeometry {
 impl From<&ManualGeometry> for ExportManualGeometry {
     fn from(geometry: &ManualGeometry) -> Self {
         match geometry {
-            ManualGeometry::Polygon { points } => Self::Polygon {
-                points: points.clone(),
+            ManualGeometry::Polygon { nodes } => Self::Polygon {
+                nodes: nodes.clone(),
             },
             ManualGeometry::ParaSymbol { point } => Self::ParaSymbol {
                 point: point.expect("manual maps are validated before export"),
@@ -309,19 +309,19 @@ mod tests {
         let creation = valid_creation(DamMap::Manual(ManualMap {
             name: "Manual polygon".to_owned(),
             geometry: ManualGeometry::Polygon {
-                points: vec![
-                    Coordinate {
+                nodes: vec![
+                    PolygonNode::point(Coordinate {
                         lon: 7.0,
                         lat: 46.0,
-                    },
-                    Coordinate {
+                    }),
+                    PolygonNode::point(Coordinate {
                         lon: 7.2,
                         lat: 46.0,
-                    },
-                    Coordinate {
+                    }),
+                    PolygonNode::point(Coordinate {
                         lon: 7.2,
                         lat: 46.2,
-                    },
+                    }),
                 ],
             },
             attributes: ManualMapAttributes {

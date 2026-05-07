@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use dam_core::{
     AltitudeCorrection, BufferFilter, Coordinate, DamCreation, DamMap, DateRange,
     DistributionSelection, LevelUnit, MAX_POLYGON_POINTS, ManualGeometry, ManualMap,
-    ManualMapAttributes, ManualMapCategory, ManualMapRendering, MapCatalog, Period,
+    ManualMapAttributes, ManualMapCategory, ManualMapRendering, MapCatalog, Period, PolygonNode,
     SelectedStaticMap, StaticMap, TextInfo, TextNumberColor, TextNumberSize, ValidationIssue,
     Weekday, default_distribution,
 };
@@ -54,33 +54,28 @@ impl ManualGeometryType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PieClickTarget {
-    Center,
-    Radius,
+pub enum ClickTarget {
+    PolygonPoint(usize),
+    PolygonArcCenter(usize),
+    PolygonArcRadius(usize),
+    PolygonLabel,
+    ParaSymbolPoint,
+    TextNumberPoint,
+    PieCenter,
+    PieRadius,
+    PieLabel,
+    StripPoint1,
+    StripPoint2,
+    StripWidth,
+    StripLabel,
 }
 
-impl PieClickTarget {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Center => "Center",
-            Self::Radius => "Radius",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StripClickTarget {
-    Point1,
-    Point2,
-}
-
-impl StripClickTarget {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Point1 => "Point 1",
-            Self::Point2 => "Point 2",
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct NextClickInfo {
+    pub anchor: Option<Coordinate>,
+    pub label: String,
+    pub show_distance: bool,
+    pub draw_anchor_line: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -132,10 +127,10 @@ impl Default for ManualMapState {
 
 impl ManualMapState {
     pub fn to_manual_map(&self, issues: &mut Vec<ValidationIssue>) -> ManualMap {
-        let attributes = self.attributes.to_attributes(issues);
+        let attributes = self.attributes.to_attributes(self.geometry_type, issues);
         let geometry = match self.geometry_type {
             ManualGeometryType::Polygon => ManualGeometry::Polygon {
-                points: self.polygon.points(issues),
+                nodes: self.polygon.nodes(issues),
             },
             ManualGeometryType::ParaSymbol => ManualGeometry::ParaSymbol {
                 point: self.para_symbol.coordinate("map.geometry.point", issues),
@@ -196,6 +191,45 @@ impl ManualMapState {
         self.to_manual_map(&mut issues)
     }
 
+    pub fn preview_with_cursor(&self, target: ClickTarget, cursor: Coordinate) -> ManualMap {
+        let mut probe = self.clone();
+        probe.apply_click_target(target, cursor);
+        probe.preview_manual_map()
+    }
+
+    /// After filling `target`, return the next field that should auto-receive focus,
+    /// or `None` if the flow is done. May append a new empty polygon row.
+    pub fn next_click_target_after(&mut self, target: ClickTarget) -> Option<ClickTarget> {
+        match target {
+            ClickTarget::PolygonPoint(i) | ClickTarget::PolygonArcRadius(i) => {
+                for j in (i + 1)..self.polygon.nodes.len() {
+                    return Some(match self.polygon.nodes[j] {
+                        PolygonNodeDraft::Point(_) => ClickTarget::PolygonPoint(j),
+                        PolygonNodeDraft::Arc(_) => ClickTarget::PolygonArcCenter(j),
+                    });
+                }
+                if self.polygon.nodes.len() < MAX_POLYGON_POINTS {
+                    self.polygon
+                        .nodes
+                        .push(PolygonNodeDraft::Point(CoordinateFieldState::default()));
+                    Some(ClickTarget::PolygonPoint(self.polygon.nodes.len() - 1))
+                } else {
+                    None
+                }
+            }
+            ClickTarget::PolygonArcCenter(i) => Some(ClickTarget::PolygonArcRadius(i)),
+            ClickTarget::PolygonLabel => None,
+            ClickTarget::ParaSymbolPoint | ClickTarget::TextNumberPoint => None,
+            ClickTarget::PieCenter => Some(ClickTarget::PieRadius),
+            ClickTarget::PieRadius => None,
+            ClickTarget::PieLabel => None,
+            ClickTarget::StripPoint1 => Some(ClickTarget::StripPoint2),
+            ClickTarget::StripPoint2 => Some(ClickTarget::StripWidth),
+            ClickTarget::StripWidth => None,
+            ClickTarget::StripLabel => None,
+        }
+    }
+
     pub fn label_position(&self) -> Option<Coordinate> {
         match self.geometry_type {
             ManualGeometryType::Polygon => self.polygon.label_position(),
@@ -206,27 +240,187 @@ impl ManualMapState {
         }
     }
 
-    pub fn apply_click(&mut self, coordinate: Coordinate) -> bool {
-        match self.geometry_type {
-            ManualGeometryType::Polygon => self.polygon.apply_click(coordinate),
-            ManualGeometryType::ParaSymbol => {
-                self.para_symbol.set_coordinate(coordinate);
-                true
+    pub fn apply_click_target(&mut self, target: ClickTarget, coord: Coordinate) {
+        match target {
+            ClickTarget::PolygonPoint(i) => {
+                if let Some(PolygonNodeDraft::Point(field)) = self.polygon.nodes.get_mut(i) {
+                    *field = CoordinateFieldState::from_coordinate(coord);
+                }
             }
-            ManualGeometryType::TextNumber => {
-                self.text_number.point = CoordinateFieldState::from_coordinate(coordinate);
-                true
+            ClickTarget::PolygonArcCenter(i) => {
+                if let Some(PolygonNodeDraft::Arc(arc)) = self.polygon.nodes.get_mut(i) {
+                    arc.center = CoordinateFieldState::from_coordinate(coord);
+                }
             }
-            ManualGeometryType::PieCircle => {
-                self.pie_circle.apply_click(coordinate);
-                true
+            ClickTarget::PolygonArcRadius(i) => {
+                if let Some(PolygonNodeDraft::Arc(arc)) = self.polygon.nodes.get_mut(i) {
+                    if let Some(center) = arc.center.silent_coordinate() {
+                        arc.radius_nm = format_nm(distance_nm(center, coord));
+                    }
+                }
             }
-            ManualGeometryType::Strip => {
-                self.strip.apply_click(coordinate);
-                true
+            ClickTarget::PolygonLabel => {
+                self.polygon.label = CoordinateFieldState::from_coordinate(coord);
+            }
+            ClickTarget::ParaSymbolPoint => {
+                self.para_symbol.point = CoordinateFieldState::from_coordinate(coord);
+            }
+            ClickTarget::TextNumberPoint => {
+                self.text_number.point = CoordinateFieldState::from_coordinate(coord);
+            }
+            ClickTarget::PieCenter => {
+                self.pie_circle.center = CoordinateFieldState::from_coordinate(coord);
+            }
+            ClickTarget::PieRadius => {
+                if let Some(center) = self.pie_circle.center.silent_coordinate() {
+                    self.pie_circle.radius_nm = format_nm(distance_nm(center, coord));
+                }
+            }
+            ClickTarget::PieLabel => {
+                self.pie_circle.label = CoordinateFieldState::from_coordinate(coord);
+            }
+            ClickTarget::StripPoint1 => {
+                self.strip.point1 = CoordinateFieldState::from_coordinate(coord);
+            }
+            ClickTarget::StripPoint2 => {
+                self.strip.point2 = CoordinateFieldState::from_coordinate(coord);
+            }
+            ClickTarget::StripWidth => {
+                if let (Some(p1), Some(p2)) = (
+                    self.strip.point1.silent_coordinate(),
+                    self.strip.point2.silent_coordinate(),
+                ) {
+                    let perp = perpendicular_distance_nm(p1, p2, coord);
+                    self.strip.width_nm = format_nm(perp * 2.0);
+                } else if let Some(p1) = self.strip.point1.silent_coordinate() {
+                    self.strip.width_nm = format_nm(distance_nm(p1, coord));
+                }
+            }
+            ClickTarget::StripLabel => {
+                self.strip.label = CoordinateFieldState::from_coordinate(coord);
             }
         }
     }
+
+    pub fn next_click_info(&self, target: ClickTarget, level_label: &str) -> NextClickInfo {
+        match target {
+            ClickTarget::PolygonPoint(i) => {
+                let anchor = self.polygon.previous_anchor(i);
+                NextClickInfo {
+                    anchor,
+                    label: format!("Point {}", point_label_index(&self.polygon, i)),
+                    show_distance: false,
+                    draw_anchor_line: anchor.is_some(),
+                }
+            }
+            ClickTarget::PolygonArcCenter(i) => NextClickInfo {
+                anchor: None,
+                label: format!("Arc {} center", arc_label_index(&self.polygon, i)),
+                show_distance: false,
+                draw_anchor_line: false,
+            },
+            ClickTarget::PolygonArcRadius(i) => {
+                let center = self.polygon.nodes.get(i).and_then(|node| match node {
+                    PolygonNodeDraft::Arc(arc) => arc.center.silent_coordinate(),
+                    _ => None,
+                });
+                NextClickInfo {
+                    anchor: center,
+                    label: format!("Arc {} radius", arc_label_index(&self.polygon, i)),
+                    show_distance: true,
+                    draw_anchor_line: center.is_some(),
+                }
+            }
+            ClickTarget::PolygonLabel
+            | ClickTarget::PieLabel
+            | ClickTarget::StripLabel => NextClickInfo {
+                anchor: None,
+                label: level_label.to_owned(),
+                show_distance: false,
+                draw_anchor_line: false,
+            },
+            ClickTarget::ParaSymbolPoint | ClickTarget::TextNumberPoint => NextClickInfo {
+                anchor: None,
+                label: "Position".to_owned(),
+                show_distance: false,
+                draw_anchor_line: false,
+            },
+            ClickTarget::PieCenter => NextClickInfo {
+                anchor: None,
+                label: "Center".to_owned(),
+                show_distance: false,
+                draw_anchor_line: false,
+            },
+            ClickTarget::PieRadius => {
+                let center = self.pie_circle.center.silent_coordinate();
+                NextClickInfo {
+                    anchor: center,
+                    label: "Radius".to_owned(),
+                    show_distance: true,
+                    draw_anchor_line: center.is_some(),
+                }
+            }
+            ClickTarget::StripPoint1 => NextClickInfo {
+                anchor: None,
+                label: "Point 1".to_owned(),
+                show_distance: false,
+                draw_anchor_line: false,
+            },
+            ClickTarget::StripPoint2 => {
+                let anchor = self.strip.point1.silent_coordinate();
+                NextClickInfo {
+                    anchor,
+                    label: "Point 2".to_owned(),
+                    show_distance: false,
+                    draw_anchor_line: anchor.is_some(),
+                }
+            }
+            ClickTarget::StripWidth => {
+                let anchor = self.strip.point1.silent_coordinate();
+                NextClickInfo {
+                    anchor,
+                    label: "Width".to_owned(),
+                    show_distance: true,
+                    draw_anchor_line: anchor.is_some(),
+                }
+            }
+        }
+    }
+}
+
+fn point_label_index(polygon: &PolygonDraftState, index: usize) -> usize {
+    polygon
+        .nodes
+        .iter()
+        .take(index + 1)
+        .filter(|node| matches!(node, PolygonNodeDraft::Point(_)))
+        .count()
+}
+
+fn arc_label_index(polygon: &PolygonDraftState, index: usize) -> usize {
+    polygon
+        .nodes
+        .iter()
+        .take(index + 1)
+        .filter(|node| matches!(node, PolygonNodeDraft::Arc(_)))
+        .count()
+}
+
+fn perpendicular_distance_nm(line_a: Coordinate, line_b: Coordinate, point: Coordinate) -> f64 {
+    let bearing = bearing_deg(line_a, line_b);
+    let along_bearing = bearing_deg(line_a, point);
+    let dist = distance_nm(line_a, point);
+    let angle = (along_bearing - bearing).to_radians();
+    (dist * angle.sin()).abs()
+}
+
+fn bearing_deg(from: Coordinate, to: Coordinate) -> f64 {
+    let lat1 = from.lat.to_radians();
+    let lat2 = to.lat.to_radians();
+    let dlon = (to.lon - from.lon).to_radians();
+    let y = dlon.sin() * lat2.cos();
+    let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * dlon.cos();
+    y.atan2(x).to_degrees()
 }
 
 #[derive(Debug, Clone)]
@@ -248,50 +442,98 @@ impl Default for ManualAttributesState {
 }
 
 impl ManualAttributesState {
-    fn to_attributes(&self, issues: &mut Vec<ValidationIssue>) -> ManualMapAttributes {
-        ManualMapAttributes {
-            category: self.category,
-            rendering: self.rendering,
-            lateral_buffer_nm: parse_f64_or_default(
+    fn to_attributes(
+        &self,
+        geometry_type: ManualGeometryType,
+        issues: &mut Vec<ValidationIssue>,
+    ) -> ManualMapAttributes {
+        let lateral_buffer_nm = if geometry_supports_buffer(geometry_type) {
+            parse_f64_or_default(
                 &self.lateral_buffer_nm,
                 0.0,
                 "map.attributes.lateral_buffer_nm",
                 issues,
-            ),
+            )
+        } else {
+            0.0
+        };
+        ManualMapAttributes {
+            category: self.category,
+            rendering: self.rendering,
+            lateral_buffer_nm,
         }
     }
 }
 
+pub fn geometry_supports_buffer(geometry_type: ManualGeometryType) -> bool {
+    matches!(
+        geometry_type,
+        ManualGeometryType::Polygon
+            | ManualGeometryType::PieCircle
+            | ManualGeometryType::Strip
+    )
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct PolygonDraftState {
-    pub points: Vec<CoordinateFieldState>,
+    pub nodes: Vec<PolygonNodeDraft>,
+    pub label: CoordinateFieldState,
+}
+
+#[derive(Debug, Clone)]
+pub enum PolygonNodeDraft {
+    Point(CoordinateFieldState),
+    Arc(ArcDraftState),
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ArcDraftState {
+    pub center: CoordinateFieldState,
+    pub radius_nm: String,
 }
 
 impl PolygonDraftState {
-    fn points(&self, issues: &mut Vec<ValidationIssue>) -> Vec<Coordinate> {
-        self.points
+    fn nodes(&self, issues: &mut Vec<ValidationIssue>) -> Vec<PolygonNode> {
+        self.nodes
             .iter()
             .enumerate()
-            .filter_map(|(index, point)| {
-                point.coordinate(&format!("map.geometry.points[{index}]"), issues)
+            .filter_map(|(index, node)| match node {
+                PolygonNodeDraft::Point(field) => field
+                    .coordinate(&format!("map.geometry.nodes[{index}]"), issues)
+                    .map(|coordinate| PolygonNode::Point { coordinate }),
+                PolygonNodeDraft::Arc(arc) => {
+                    let center = arc
+                        .center
+                        .coordinate(&format!("map.geometry.nodes[{index}].center"), issues);
+                    let radius_nm = parse_optional_positive_f64(
+                        &arc.radius_nm,
+                        &format!("map.geometry.nodes[{index}].radius_nm"),
+                        issues,
+                    );
+                    match (center, radius_nm) {
+                        (Some(center), Some(radius_nm)) => {
+                            Some(PolygonNode::Arc { center, radius_nm })
+                        }
+                        _ => None,
+                    }
+                }
             })
             .collect()
     }
 
     fn label_position(&self) -> Option<Coordinate> {
-        self.points
-            .iter()
-            .rev()
-            .find_map(CoordinateFieldState::silent_coordinate)
+        self.label.silent_coordinate()
     }
 
-    fn apply_click(&mut self, coordinate: Coordinate) -> bool {
-        if self.points.len() >= MAX_POLYGON_POINTS {
-            return false;
-        }
-        self.points
-            .push(CoordinateFieldState::from_coordinate(coordinate));
-        true
+    pub fn previous_anchor(&self, before_index: usize) -> Option<Coordinate> {
+        self.nodes
+            .iter()
+            .take(before_index)
+            .rev()
+            .find_map(|node| match node {
+                PolygonNodeDraft::Point(field) => field.silent_coordinate(),
+                PolygonNodeDraft::Arc(arc) => arc.center.silent_coordinate(),
+            })
     }
 }
 
@@ -307,10 +549,6 @@ impl PointDraftState {
 
     fn silent_coordinate(&self) -> Option<Coordinate> {
         self.point.silent_coordinate()
-    }
-
-    fn set_coordinate(&mut self, coordinate: Coordinate) {
-        self.point = CoordinateFieldState::from_coordinate(coordinate);
     }
 }
 
@@ -339,8 +577,7 @@ pub struct PieCircleDraftState {
     pub radius_nm: String,
     pub first_angle_deg: String,
     pub last_angle_deg: String,
-    pub click_target: PieClickTarget,
-    radius_label_position: Option<Coordinate>,
+    pub label: CoordinateFieldState,
 }
 
 impl Default for PieCircleDraftState {
@@ -350,51 +587,14 @@ impl Default for PieCircleDraftState {
             radius_nm: String::new(),
             first_angle_deg: "0".to_owned(),
             last_angle_deg: "360".to_owned(),
-            click_target: PieClickTarget::Center,
-            radius_label_position: None,
+            label: CoordinateFieldState::default(),
         }
     }
 }
 
 impl PieCircleDraftState {
     fn label_position(&self) -> Option<Coordinate> {
-        let center = self.center.silent_coordinate()?;
-        if let Some(radius) = parse_silent_positive_f64(&self.radius_nm) {
-            if let Some(label) = self.radius_label_position {
-                return Some(label);
-            }
-            return Some(destination_point(center, 90.0, radius));
-        }
-        Some(center)
-    }
-
-    fn apply_click(&mut self, coordinate: Coordinate) {
-        if self.center.silent_coordinate().is_none() {
-            self.center = CoordinateFieldState::from_coordinate(coordinate);
-            self.click_target = PieClickTarget::Radius;
-            return;
-        }
-
-        if parse_silent_positive_f64(&self.radius_nm).is_none() {
-            if let Some(center) = self.center.silent_coordinate() {
-                self.radius_nm = format_nm(distance_nm(center, coordinate));
-                self.radius_label_position = Some(coordinate);
-            }
-            return;
-        }
-
-        match self.click_target {
-            PieClickTarget::Center => {
-                self.center = CoordinateFieldState::from_coordinate(coordinate);
-                self.radius_label_position = None;
-            }
-            PieClickTarget::Radius => {
-                if let Some(center) = self.center.silent_coordinate() {
-                    self.radius_nm = format_nm(distance_nm(center, coordinate));
-                    self.radius_label_position = Some(coordinate);
-                }
-            }
-        }
+        self.label.silent_coordinate()
     }
 }
 
@@ -403,7 +603,7 @@ pub struct StripDraftState {
     pub point1: CoordinateFieldState,
     pub point2: CoordinateFieldState,
     pub width_nm: String,
-    pub click_target: StripClickTarget,
+    pub label: CoordinateFieldState,
 }
 
 impl Default for StripDraftState {
@@ -412,38 +612,14 @@ impl Default for StripDraftState {
             point1: CoordinateFieldState::default(),
             point2: CoordinateFieldState::default(),
             width_nm: String::new(),
-            click_target: StripClickTarget::Point1,
+            label: CoordinateFieldState::default(),
         }
     }
 }
 
 impl StripDraftState {
     fn label_position(&self) -> Option<Coordinate> {
-        self.point2
-            .silent_coordinate()
-            .or_else(|| self.point1.silent_coordinate())
-    }
-
-    fn apply_click(&mut self, coordinate: Coordinate) {
-        if self.point1.silent_coordinate().is_none() {
-            self.point1 = CoordinateFieldState::from_coordinate(coordinate);
-            self.click_target = StripClickTarget::Point2;
-            return;
-        }
-        if self.point2.silent_coordinate().is_none() {
-            self.point2 = CoordinateFieldState::from_coordinate(coordinate);
-            self.click_target = StripClickTarget::Point2;
-            return;
-        }
-
-        match self.click_target {
-            StripClickTarget::Point1 => {
-                self.point1 = CoordinateFieldState::from_coordinate(coordinate);
-            }
-            StripClickTarget::Point2 => {
-                self.point2 = CoordinateFieldState::from_coordinate(coordinate);
-            }
-        }
+        self.label.silent_coordinate()
     }
 }
 
@@ -454,14 +630,14 @@ pub struct CoordinateFieldState {
 }
 
 impl CoordinateFieldState {
-    fn from_coordinate(coordinate: Coordinate) -> Self {
+    pub fn from_coordinate(coordinate: Coordinate) -> Self {
         Self {
             lat: format_coordinate(coordinate.lat),
             lon: format_coordinate(coordinate.lon),
         }
     }
 
-    fn coordinate(&self, field: &str, issues: &mut Vec<ValidationIssue>) -> Option<Coordinate> {
+    pub fn coordinate(&self, field: &str, issues: &mut Vec<ValidationIssue>) -> Option<Coordinate> {
         let lat = self.lat.trim();
         let lon = self.lon.trim();
         if lat.is_empty() && lon.is_empty() {
@@ -480,7 +656,7 @@ impl CoordinateFieldState {
         Some(Coordinate { lon, lat })
     }
 
-    fn silent_coordinate(&self) -> Option<Coordinate> {
+    pub fn silent_coordinate(&self) -> Option<Coordinate> {
         let lat = self.lat.trim().parse::<f64>().ok()?;
         let lon = self.lon.trim().parse::<f64>().ok()?;
         if !lat.is_finite()
@@ -707,14 +883,6 @@ fn parse_optional_positive_f64(
     }
 }
 
-fn parse_silent_positive_f64(value: &str) -> Option<f64> {
-    let parsed = value.trim().parse::<f64>().ok()?;
-    if parsed.is_finite() && parsed > 0.0 {
-        Some(parsed)
-    } else {
-        None
-    }
-}
 
 fn format_coordinate(value: f64) -> String {
     format!("{value:.6}")
@@ -736,22 +904,6 @@ fn distance_nm(left: Coordinate, right: Coordinate) -> f64 {
     let dlon = (right.lon - left.lon).to_radians();
     let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
     EARTH_RADIUS_NM * 2.0 * a.sqrt().atan2((1.0 - a).sqrt())
-}
-
-fn destination_point(origin: Coordinate, bearing_deg: f64, distance_nm: f64) -> Coordinate {
-    const EARTH_RADIUS_NM: f64 = 3440.065;
-    let angular = distance_nm / EARTH_RADIUS_NM;
-    let bearing = bearing_deg.to_radians();
-    let lat1 = origin.lat.to_radians();
-    let lon1 = origin.lon.to_radians();
-    let lat2 = (lat1.sin() * angular.cos() + lat1.cos() * angular.sin() * bearing.cos()).asin();
-    let lon2 = lon1
-        + (bearing.sin() * angular.sin() * lat1.cos())
-            .atan2(angular.cos() - lat1.sin() * lat2.sin());
-    Coordinate {
-        lon: lon2.to_degrees(),
-        lat: lat2.to_degrees(),
-    }
 }
 
 #[derive(Debug, Clone)]

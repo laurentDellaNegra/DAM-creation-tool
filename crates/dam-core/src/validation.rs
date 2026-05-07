@@ -1,5 +1,6 @@
 use crate::{
-    DamCreation, DamMap, MAX_PERIODS, MAX_POLYGON_POINTS, ManualGeometry, ManualMap, Weekday,
+    DamCreation, DamMap, MAX_PERIODS, MAX_POLYGON_POINTS, ManualGeometry, ManualMap, PolygonNode,
+    Weekday,
 };
 use chrono::NaiveTime;
 use serde::{Deserialize, Serialize};
@@ -182,21 +183,46 @@ fn validate_manual_attributes(manual: &ManualMap, issues: &mut Vec<ValidationIss
 
 fn validate_manual_geometry(geometry: &ManualGeometry, issues: &mut Vec<ValidationIssue>) {
     match geometry {
-        ManualGeometry::Polygon { points } => {
-            if points.len() < 3 {
+        ManualGeometry::Polygon { nodes } => {
+            let point_count = nodes
+                .iter()
+                .filter(|node| matches!(node, PolygonNode::Point { .. }))
+                .count();
+            if point_count < 3 {
                 issues.push(ValidationIssue::new(
-                    "map.geometry.points",
+                    "map.geometry.nodes",
                     "Polygon requires at least 3 points.",
                 ));
             }
-            if points.len() > MAX_POLYGON_POINTS {
+            if nodes.len() > MAX_POLYGON_POINTS {
                 issues.push(ValidationIssue::new(
-                    "map.geometry.points",
-                    format!("Polygon can contain at most {MAX_POLYGON_POINTS} points."),
+                    "map.geometry.nodes",
+                    format!("Polygon can contain at most {MAX_POLYGON_POINTS} rows."),
                 ));
             }
-            for (index, point) in points.iter().enumerate() {
-                validate_coordinate(*point, &format!("map.geometry.points[{index}]"), issues);
+            for (index, node) in nodes.iter().enumerate() {
+                match node {
+                    PolygonNode::Point { coordinate } => {
+                        validate_coordinate(
+                            *coordinate,
+                            &format!("map.geometry.nodes[{index}]"),
+                            issues,
+                        );
+                    }
+                    PolygonNode::Arc { center, radius_nm } => {
+                        validate_coordinate(
+                            *center,
+                            &format!("map.geometry.nodes[{index}].center"),
+                            issues,
+                        );
+                        if !radius_nm.is_finite() || *radius_nm <= 0.0 {
+                            issues.push(ValidationIssue::new(
+                                format!("map.geometry.nodes[{index}].radius_nm"),
+                                "Arc radius must be greater than zero NM.",
+                            ));
+                        }
+                    }
+                }
             }
         }
         ManualGeometry::ParaSymbol { point } => {
@@ -345,7 +371,7 @@ mod tests {
     use super::*;
     use crate::{
         AltitudeCorrection, BufferFilter, Coordinate, DateRange, DistributionSelection, Level,
-        LevelUnit, ManualMapAttributes, ManualMapCategory, ManualMapRendering, Period,
+        LevelUnit, ManualMapAttributes, ManualMapCategory, ManualMapRendering, Period, PolygonNode,
         SelectedStaticMap, TextInfo, TextNumberColor, TextNumberSize,
     };
     use chrono::NaiveDate;
@@ -452,10 +478,10 @@ mod tests {
     fn accepts_complete_manual_polygon() {
         let mut creation = valid_creation();
         creation.map = DamMap::Manual(manual_map(ManualGeometry::Polygon {
-            points: vec![
-                coordinate(7.0, 46.0),
-                coordinate(7.2, 46.0),
-                coordinate(7.2, 46.2),
+            nodes: vec![
+                PolygonNode::point(coordinate(7.0, 46.0)),
+                PolygonNode::point(coordinate(7.2, 46.0)),
+                PolygonNode::point(coordinate(7.2, 46.2)),
             ],
         }));
 
@@ -466,7 +492,10 @@ mod tests {
     fn rejects_incomplete_manual_polygon() {
         let mut creation = valid_creation();
         creation.map = DamMap::Manual(manual_map(ManualGeometry::Polygon {
-            points: vec![coordinate(7.0, 46.0), coordinate(7.2, 46.0)],
+            nodes: vec![
+                PolygonNode::point(coordinate(7.0, 46.0)),
+                PolygonNode::point(coordinate(7.2, 46.0)),
+            ],
         }));
 
         let err = validate_creation(&creation).unwrap_err();
@@ -474,16 +503,16 @@ mod tests {
         assert!(
             err.issues
                 .iter()
-                .any(|issue| issue.field == "map.geometry.points")
+                .any(|issue| issue.field == "map.geometry.nodes")
         );
     }
 
     #[test]
-    fn rejects_manual_polygon_with_more_than_10_points() {
+    fn rejects_manual_polygon_with_more_than_10_rows() {
         let mut creation = valid_creation();
         creation.map = DamMap::Manual(manual_map(ManualGeometry::Polygon {
-            points: (0..11)
-                .map(|index| coordinate(7.0 + f64::from(index) * 0.01, 46.0))
+            nodes: (0..11)
+                .map(|index| PolygonNode::point(coordinate(7.0 + f64::from(index) * 0.01, 46.0)))
                 .collect(),
         }));
 

@@ -1,6 +1,7 @@
+use crate::form::{ClickTarget, ManualMapState, NextClickInfo};
 use dam_core::{
     Coordinate, ManualGeometry, ManualMap, ManualMapAttributes, ManualMapCategory,
-    ManualMapRendering, TextNumberColor, TextNumberSize,
+    ManualMapRendering, TextNumberColor, TextNumberSize, expand_polygon_nodes,
 };
 
 pub struct PreviewOverlay {
@@ -8,6 +9,10 @@ pub struct PreviewOverlay {
     selected_paths: Vec<Vec<Coordinate>>,
     manual_map: Option<ManualMap>,
     level_label: Option<(Coordinate, String)>,
+    next_click: Option<NextClickInfo>,
+    cursor_preview: Option<(ManualMapState, ClickTarget)>,
+    level_label_text: Option<String>,
+    display_levels: bool,
 }
 
 impl PreviewOverlay {
@@ -16,12 +21,20 @@ impl PreviewOverlay {
         selected_paths: Vec<Vec<Coordinate>>,
         manual_map: Option<ManualMap>,
         level_label: Option<(Coordinate, String)>,
+        next_click: Option<NextClickInfo>,
+        cursor_preview: Option<(ManualMapState, ClickTarget)>,
+        level_label_text: Option<String>,
+        display_levels: bool,
     ) -> Self {
         Self {
             base_paths,
             selected_paths,
             manual_map,
             level_label,
+            next_click,
+            cursor_preview,
+            level_label_text,
+            display_levels,
         }
     }
 }
@@ -50,12 +63,68 @@ impl walkers::Plugin for PreviewOverlay {
             egui::Stroke::new(2.4, egui::Color32::from_rgb(95, 200, 205)),
         );
 
-        if let Some(manual_map) = &self.manual_map {
+        let hover_inside = response
+            .hover_pos()
+            .filter(|pos| response.rect.contains(*pos));
+        let cursor_coord = hover_inside.map(|pos| {
+            let projected = projector.unproject(pos.to_vec2());
+            Coordinate {
+                lon: projected.x(),
+                lat: projected.y(),
+            }
+        });
+
+        let (ghost_map, ghost_label) =
+            if let (Some(coord), Some((state, target))) = (cursor_coord, &self.cursor_preview) {
+                let map = state.preview_with_cursor(*target, coord);
+                let label = if self.display_levels {
+                    map.label_position
+                        .zip(self.level_label_text.clone())
+                        .map(|(pos, text)| (pos, text))
+                } else {
+                    None
+                };
+                (Some(map), label)
+            } else {
+                (None, None)
+            };
+
+        let render_map = ghost_map.as_ref().or(self.manual_map.as_ref());
+        if let Some(manual_map) = render_map {
             paint_manual_map(painter, projector, manual_map);
         }
 
-        if let Some((position, label)) = &self.level_label {
+        let render_label = ghost_label.as_ref().or(self.level_label.as_ref());
+        if let Some((position, label)) = render_label {
             paint_level_label(painter, projector, *position, label);
+        }
+
+        if let Some(hover_pos) = hover_inside {
+            let cursor_coord = cursor_coord.expect("hover_inside implies cursor_coord");
+
+            if let Some(next_click) = &self.next_click {
+                if let Some(anchor) = next_click.anchor {
+                    if next_click.draw_anchor_line {
+                        paint_preview_line(painter, projector, anchor, hover_pos);
+                    }
+                }
+                if next_click.show_distance {
+                    if let Some(anchor) = next_click.anchor {
+                        let distance = distance_nm(anchor, cursor_coord);
+                        paint_cursor_target_label(
+                            painter,
+                            hover_pos,
+                            &format!("{} · {:.1} NM", next_click.label, distance),
+                        );
+                    } else {
+                        paint_cursor_target_label(painter, hover_pos, &next_click.label);
+                    }
+                } else {
+                    paint_cursor_target_label(painter, hover_pos, &next_click.label);
+                }
+            }
+
+            paint_cursor_readout(painter, response.rect, cursor_coord);
         }
     }
 }
@@ -77,10 +146,22 @@ fn paint_manual_map(
     manual_map: &ManualMap,
 ) {
     let color = category_color(manual_map.attributes.category);
+    let buffer_nm = manual_map.attributes.lateral_buffer_nm;
     match &manual_map.geometry {
-        ManualGeometry::Polygon { points } => {
-            paint_surface_or_line(painter, projector, points, &manual_map.attributes, true);
-            paint_points(painter, projector, points, color);
+        ManualGeometry::Polygon { nodes } => {
+            let points = expand_polygon_nodes(nodes);
+            paint_surface_or_line(painter, projector, &points, &manual_map.attributes, true);
+            if buffer_nm > 0.0 && points.len() >= 3 {
+                let buffered = offset_polygon_outward(&points, buffer_nm);
+                paint_buffer_outline(painter, projector, &buffered, color, true);
+            }
+            for node in nodes {
+                if let Some(coord) = node.point_coordinate() {
+                    paint_point(painter, projector, coord, color);
+                } else if let dam_core::PolygonNode::Arc { center, .. } = node {
+                    paint_point(painter, projector, *center, color);
+                }
+            }
         }
         ManualGeometry::ParaSymbol { point } => {
             if let Some(point) = point {
@@ -115,6 +196,21 @@ fn paint_manual_map(
                         &manual_map.attributes,
                         is_full_circle(*first_angle_deg, *last_angle_deg),
                     );
+                    if buffer_nm > 0.0 {
+                        let buffered = pie_circle_points(
+                            *center,
+                            *radius_nm + buffer_nm,
+                            *first_angle_deg,
+                            *last_angle_deg,
+                        );
+                        paint_buffer_outline(
+                            painter,
+                            projector,
+                            &buffered,
+                            color,
+                            is_full_circle(*first_angle_deg, *last_angle_deg),
+                        );
+                    }
                 }
             }
         }
@@ -132,6 +228,10 @@ fn paint_manual_map(
             if let (Some(point1), Some(point2), Some(width_nm)) = (point1, point2, width_nm) {
                 let polygon = strip_points(*point1, *point2, *width_nm);
                 paint_surface_or_line(painter, projector, &polygon, &manual_map.attributes, true);
+                if buffer_nm > 0.0 {
+                    let buffered = strip_points(*point1, *point2, *width_nm + buffer_nm * 2.0);
+                    paint_buffer_outline(painter, projector, &buffered, color, true);
+                }
             } else if let (Some(point1), Some(point2)) = (point1, point2) {
                 paint_line(
                     painter,
@@ -166,17 +266,47 @@ fn paint_surface_or_line(
     }
 
     if points.len() >= 2 {
-        if attributes.lateral_buffer_nm > 0.0 {
-            let width = buffer_width_px(projector, coordinates[0], attributes.lateral_buffer_nm);
-            painter.add(egui::Shape::line(
-                points.clone(),
-                egui::Stroke::new(width, color.linear_multiply(0.16)),
-            ));
-        }
         painter.add(egui::Shape::line(points, egui::Stroke::new(2.2, color)));
     } else if let Some(point) = coordinates.first() {
         paint_point(painter, projector, *point, color);
     }
+}
+
+fn paint_buffer_outline(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    coordinates: &[Coordinate],
+    color: egui::Color32,
+    close: bool,
+) {
+    let mut points = projected_points(projector, coordinates);
+    if close && points.len() >= 2 {
+        points.push(points[0]);
+    }
+    if points.len() >= 2 {
+        painter.add(egui::Shape::line(
+            points,
+            egui::Stroke::new(1.5, color.linear_multiply(0.55)),
+        ));
+    }
+}
+
+fn offset_polygon_outward(points: &[Coordinate], buffer_nm: f64) -> Vec<Coordinate> {
+    let n = points.len();
+    if n == 0 || buffer_nm <= 0.0 {
+        return points.to_vec();
+    }
+    let centroid = Coordinate {
+        lon: points.iter().map(|p| p.lon).sum::<f64>() / n as f64,
+        lat: points.iter().map(|p| p.lat).sum::<f64>() / n as f64,
+    };
+    points
+        .iter()
+        .map(|p| {
+            let bearing = bearing_deg(centroid, *p);
+            destination_point(*p, bearing, buffer_nm)
+        })
+        .collect()
 }
 
 fn paint_line(
@@ -188,17 +318,6 @@ fn paint_line(
     let points = projected_points(projector, path);
     if points.len() >= 2 {
         painter.add(egui::Shape::line(points, stroke));
-    }
-}
-
-fn paint_points(
-    painter: &egui::Painter,
-    projector: &walkers::Projector,
-    points: &[Coordinate],
-    color: egui::Color32,
-) {
-    for point in points {
-        paint_point(painter, projector, *point, color);
     }
 }
 
@@ -320,10 +439,70 @@ fn text_size(size: TextNumberSize) -> f32 {
     }
 }
 
-fn buffer_width_px(projector: &walkers::Projector, coordinate: Coordinate, buffer_nm: f64) -> f32 {
-    let meters = buffer_nm * 1852.0;
-    let scale = projector.scale_pixel_per_meter(walkers::lon_lat(coordinate.lon, coordinate.lat));
-    (meters as f32 * scale).clamp(3.0, 48.0)
+fn paint_preview_line(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    anchor: Coordinate,
+    cursor_pos: egui::Pos2,
+) {
+    let anchor_pos = project(projector, anchor);
+    let stroke = egui::Stroke::new(1.5, egui::Color32::from_rgb(220, 230, 240));
+    painter.line_segment([anchor_pos, cursor_pos], stroke);
+}
+
+fn paint_cursor_target_label(painter: &egui::Painter, cursor_pos: egui::Pos2, label: &str) {
+    let position = cursor_pos + egui::vec2(14.0, -22.0);
+    let galley = painter.layout_no_wrap(
+        label.to_owned(),
+        egui::FontId::proportional(12.0),
+        egui::Color32::WHITE,
+    );
+    let padding = egui::vec2(6.0, 3.0);
+    let size = galley.size() + padding * 2.0;
+    let bg_rect = egui::Rect::from_min_size(position, size);
+    painter.rect_filled(bg_rect, 3.0, egui::Color32::from_black_alpha(200));
+    painter.rect_stroke(
+        bg_rect,
+        3.0,
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(170, 200, 220)),
+        egui::StrokeKind::Outside,
+    );
+    painter.galley(position + padding, galley, egui::Color32::WHITE);
+}
+
+fn distance_nm(left: Coordinate, right: Coordinate) -> f64 {
+    const EARTH_RADIUS_NM: f64 = 3440.065;
+    let lat1 = left.lat.to_radians();
+    let lat2 = right.lat.to_radians();
+    let dlat = (right.lat - left.lat).to_radians();
+    let dlon = (right.lon - left.lon).to_radians();
+    let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+    EARTH_RADIUS_NM * 2.0 * a.sqrt().atan2((1.0 - a).sqrt())
+}
+
+fn paint_cursor_readout(painter: &egui::Painter, rect: egui::Rect, coordinate: Coordinate) {
+    let label = format!(
+        "Lon {:>10.5}°  Lat {:>9.5}°",
+        coordinate.lon, coordinate.lat
+    );
+    let galley = painter.layout_no_wrap(
+        label,
+        egui::FontId::monospace(12.0),
+        egui::Color32::WHITE,
+    );
+    let padding = egui::vec2(8.0, 4.0);
+    let size = galley.size() + padding * 2.0;
+    let position =
+        egui::pos2(rect.right() - size.x - 8.0, rect.bottom() - size.y - 8.0);
+    let bg_rect = egui::Rect::from_min_size(position, size);
+    painter.rect_filled(bg_rect, 3.0, egui::Color32::from_black_alpha(200));
+    painter.rect_stroke(
+        bg_rect,
+        3.0,
+        egui::Stroke::new(1.0, egui::Color32::from_rgb(150, 170, 180)),
+        egui::StrokeKind::Outside,
+    );
+    painter.galley(position + padding, galley, egui::Color32::WHITE);
 }
 
 fn pie_circle_points(
