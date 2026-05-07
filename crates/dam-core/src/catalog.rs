@@ -95,7 +95,8 @@ pub struct PreviewGeometry {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PreviewPath {
     pub coordinates: Vec<Coordinate>,
-    pub color: Option<[u8; 3]>,
+    #[serde(rename = "borderColor")]
+    pub border_color: Option<[u8; 3]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -189,16 +190,16 @@ fn preview_geometry_from_value(value: &Value) -> PreviewGeometry {
     if let Some(features) = value.get("features").and_then(Value::as_array) {
         for feature in features {
             if let Some(geometry) = feature.get("geometry") {
-                let color = feature
+                let border_color = feature
                     .get("properties")
-                    .and_then(|p| p.get("color"))
+                    .and_then(|p| p.get("borderColor"))
                     .and_then(Value::as_str)
                     .and_then(parse_hex_color);
                 let before = preview.paths.len();
                 extract_geometry_paths(geometry, &mut preview.paths);
-                if let Some(rgb) = color {
+                if let Some(rgb) = border_color {
                     for path in &mut preview.paths[before..] {
-                        path.color = Some(rgb);
+                        path.border_color = Some(rgb);
                     }
                 }
             }
@@ -256,7 +257,7 @@ fn push_line_string(value: &Value, paths: &mut Vec<PreviewPath>) {
     if coordinates.len() >= 2 {
         paths.push(PreviewPath {
             coordinates,
-            color: None,
+            border_color: None,
         });
     }
 }
@@ -406,7 +407,7 @@ mod tests {
               "type": "LineString",
               "coordinates": [[7.8, 46.4], [8.0, 46.2]]
             },
-            "properties": {"color": "#2d5f5f"}
+            "properties": {"color": "#ffffff", "borderColor": "#2d5f5f"}
           }]
         }"##;
 
@@ -416,6 +417,10 @@ mod tests {
         assert_eq!(catalog.maps[0].id, "50714");
         assert_eq!(catalog.maps[0].name, "HAUT VALAIS");
         assert_eq!(catalog.maps[0].preview.paths.len(), 1);
+        assert_eq!(
+            catalog.maps[0].preview.paths[0].border_color,
+            Some([0x2d, 0x5f, 0x5f])
+        );
         assert!(catalog.maps[0].preview.bbox.is_some());
     }
 

@@ -529,18 +529,43 @@ impl DamApp {
                     for map in &filtered {
                         let selected =
                             self.form.selected_map_id.as_deref() == Some(map.id.as_str());
+                        let fill = if selected {
+                            egui::Color32::from_rgb(18, 43, 50)
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        };
+                        let stroke = if selected {
+                            egui::Stroke::new(1.0, ACCENT)
+                        } else {
+                            egui::Stroke::new(1.0, egui::Color32::TRANSPARENT)
+                        };
                         let label = if selected {
                             egui::RichText::new(map.label()).strong().color(ACCENT)
                         } else {
                             egui::RichText::new(map.label())
                         };
-                        if ui.selectable_label(selected, label).clicked() {
+
+                        let item = egui::Frame::new()
+                            .fill(fill)
+                            .stroke(stroke)
+                            .inner_margin(8)
+                            .show(ui, |ui| {
+                                ui.label(label);
+                                if let Some(description) = &map.description {
+                                    ui.small(description);
+                                }
+                            });
+                        let item_response = ui
+                            .interact(
+                                item.response.rect,
+                                ui.make_persistent_id(("static-map-result", map.id.as_str())),
+                                egui::Sense::click(),
+                            )
+                            .on_hover_cursor(egui::CursorIcon::PointingHand);
+                        if item_response.clicked() {
                             selected_after = Some(map.id.clone());
                         }
-                        if let Some(description) = &map.description {
-                            ui.small(description);
-                        }
-                        ui.separator();
+                        ui.add_space(4.0);
                     }
                 });
         });

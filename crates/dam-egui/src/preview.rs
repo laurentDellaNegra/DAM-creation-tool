@@ -3,6 +3,10 @@ use dam_core::{
     Coordinate, ManualGeometry, ManualMap, ManualMapAttributes, ManualMapCategory,
     ManualMapRendering, PreviewPath, TextNumberColor, TextNumberSize, expand_polygon_nodes,
 };
+use geo::Buffer;
+
+const METERS_PER_NM: f64 = 1_852.0;
+const EARTH_RADIUS_M: f64 = 6_371_008.8;
 
 pub struct PreviewOverlay {
     base_paths: Vec<PreviewPath>,
@@ -139,7 +143,7 @@ fn paint_preview_paths(
 ) {
     for path in paths {
         let color = path
-            .color
+            .border_color
             .map(|[r, g, b]| egui::Color32::from_rgb(r, g, b))
             .unwrap_or(fallback_color);
         paint_line(
@@ -163,8 +167,9 @@ fn paint_manual_map(
             let points = expand_polygon_nodes(nodes);
             paint_surface_or_line(painter, projector, &points, &manual_map.attributes, true);
             if buffer_nm > 0.0 && points.len() >= 3 {
-                let buffered = offset_polygon_outward(&points, buffer_nm);
-                paint_buffer_outline(painter, projector, &buffered, color, true);
+                for buffered in buffered_polygon_outlines(&points, buffer_nm) {
+                    paint_buffer_outline(painter, projector, &buffered, color, true);
+                }
             }
             for node in nodes {
                 if let Some(coord) = node.point_coordinate() {
@@ -240,8 +245,9 @@ fn paint_manual_map(
                 let polygon = strip_points(*point1, *point2, *width_nm);
                 paint_surface_or_line(painter, projector, &polygon, &manual_map.attributes, true);
                 if buffer_nm > 0.0 {
-                    let buffered = strip_points(*point1, *point2, *width_nm + buffer_nm * 2.0);
-                    paint_buffer_outline(painter, projector, &buffered, color, true);
+                    for buffered in buffered_polygon_outlines(&polygon, buffer_nm) {
+                        paint_buffer_outline(painter, projector, &buffered, color, true);
+                    }
                 }
             } else if let (Some(point1), Some(point2)) = (point1, point2) {
                 paint_line(
@@ -269,11 +275,7 @@ fn paint_surface_or_line(
     }
 
     if attributes.rendering == ManualMapRendering::Surface && points.len() >= 3 {
-        painter.add(egui::Shape::convex_polygon(
-            points.clone(),
-            color.linear_multiply(0.22),
-            egui::Stroke::new(1.8, color),
-        ));
+        paint_filled_polygon(painter, &points, color.linear_multiply(0.22));
     }
 
     if points.len() >= 2 {
@@ -281,6 +283,38 @@ fn paint_surface_or_line(
     } else if let Some(point) = coordinates.first() {
         paint_point(painter, projector, *point, color);
     }
+}
+
+fn paint_filled_polygon(painter: &egui::Painter, points: &[egui::Pos2], fill: egui::Color32) {
+    let mut vertices: Vec<egui::Pos2> = points.to_vec();
+    if vertices.first() == vertices.last() {
+        vertices.pop();
+    }
+    if vertices.len() < 3 {
+        return;
+    }
+
+    let flat: Vec<f64> = vertices
+        .iter()
+        .flat_map(|point| [f64::from(point.x), f64::from(point.y)])
+        .collect();
+    let Ok(indices) = earcutr::earcut(&flat, &[], 2) else {
+        return;
+    };
+    if indices.is_empty() {
+        return;
+    }
+
+    let mut mesh = egui::Mesh::default();
+    mesh.reserve_vertices(vertices.len());
+    mesh.reserve_triangles(indices.len() / 3);
+    for point in vertices {
+        mesh.colored_vertex(point, fill);
+    }
+    for triangle in indices.chunks_exact(3) {
+        mesh.add_triangle(triangle[0] as u32, triangle[1] as u32, triangle[2] as u32);
+    }
+    painter.add(egui::Shape::from(mesh));
 }
 
 fn paint_buffer_outline(
@@ -302,22 +336,91 @@ fn paint_buffer_outline(
     }
 }
 
-fn offset_polygon_outward(points: &[Coordinate], buffer_nm: f64) -> Vec<Coordinate> {
-    let n = points.len();
-    if n == 0 || buffer_nm <= 0.0 {
-        return points.to_vec();
+fn buffered_polygon_outlines(points: &[Coordinate], buffer_nm: f64) -> Vec<Vec<Coordinate>> {
+    if points.len() < 3 || buffer_nm <= 0.0 {
+        return Vec::new();
     }
-    let centroid = Coordinate {
-        lon: points.iter().map(|p| p.lon).sum::<f64>() / n as f64,
-        lat: points.iter().map(|p| p.lat).sum::<f64>() / n as f64,
+
+    let Some(projection) = LocalProjection::from_points(points) else {
+        return Vec::new();
     };
-    points
+    let mut exterior: Vec<geo::Coord> = points
         .iter()
-        .map(|p| {
-            let bearing = bearing_deg(centroid, *p);
-            destination_point(*p, bearing, buffer_nm)
+        .map(|point| {
+            let (x, y) = projection.project(*point);
+            geo::Coord { x, y }
+        })
+        .collect();
+    if exterior.first() != exterior.last()
+        && let Some(first) = exterior.first().copied()
+    {
+        exterior.push(first);
+    }
+
+    let polygon = geo::Polygon::new(geo::LineString::from(exterior), Vec::new());
+    polygon
+        .buffer(buffer_nm * METERS_PER_NM)
+        .0
+        .iter()
+        .filter_map(|polygon| {
+            let mut coordinates: Vec<Coordinate> = polygon
+                .exterior()
+                .0
+                .iter()
+                .map(|coord| projection.unproject(coord.x, coord.y))
+                .collect();
+            if coordinates.first() == coordinates.last() {
+                coordinates.pop();
+            }
+            (coordinates.len() >= 3).then_some(coordinates)
         })
         .collect()
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LocalProjection {
+    origin: Coordinate,
+    origin_lat_rad: f64,
+    cos_origin_lat: f64,
+}
+
+impl LocalProjection {
+    fn from_points(points: &[Coordinate]) -> Option<Self> {
+        if points.is_empty() {
+            return None;
+        }
+        let origin = Coordinate {
+            lon: points.iter().map(|p| p.lon).sum::<f64>() / points.len() as f64,
+            lat: points.iter().map(|p| p.lat).sum::<f64>() / points.len() as f64,
+        };
+        if !origin.lon.is_finite() || !origin.lat.is_finite() {
+            return None;
+        }
+        let origin_lat_rad = origin.lat.to_radians();
+        let cos_origin_lat = origin_lat_rad.cos();
+        if cos_origin_lat.abs() < 1e-6 {
+            return None;
+        }
+        Some(Self {
+            origin,
+            origin_lat_rad,
+            cos_origin_lat,
+        })
+    }
+
+    fn project(self, coordinate: Coordinate) -> (f64, f64) {
+        let x =
+            (coordinate.lon - self.origin.lon).to_radians() * EARTH_RADIUS_M * self.cos_origin_lat;
+        let y = (coordinate.lat.to_radians() - self.origin_lat_rad) * EARTH_RADIUS_M;
+        (x, y)
+    }
+
+    fn unproject(self, x: f64, y: f64) -> Coordinate {
+        Coordinate {
+            lon: self.origin.lon + (x / (EARTH_RADIUS_M * self.cos_origin_lat)).to_degrees(),
+            lat: (self.origin_lat_rad + y / EARTH_RADIUS_M).to_degrees(),
+        }
+    }
 }
 
 fn paint_line(

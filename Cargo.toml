@@ -18,6 +18,8 @@ dam-core = { path = "crates/dam-core" }
 dam-egui = { path = "crates/dam-egui" }
 eframe = "0.34.1"
 egui = "0.34.1"
+earcutr = "0.4.3"
+geo = "0.32.0"
 include_dir = "0.7.4"
 js-sys = "0.3.82"
 log = "0.4.28"

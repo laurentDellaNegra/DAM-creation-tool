@@ -7,8 +7,10 @@ version.workspace = true
 [dependencies]
 chrono.workspace = true
 dam-core.workspace = true
+earcutr.workspace = true
 eframe.workspace = true
 egui.workspace = true
+geo.workspace = true
 js-sys.workspace = true
 log.workspace = true
 serde_json.workspace = true
@@ -23,4 +25,3 @@ web-sys = { workspace = true, features = [
   "Url",
   "Window",
 ] }
-
