@@ -161,11 +161,12 @@ Three independent segmented selectors:
 
 - **Reset** opens a confirmation window; on confirm, the form is rebuilt from
   defaults, validation state and status are cleared, and the preview re-centers.
-- **Send** runs full validation, builds the typed `DamCreation` model,
-  serializes it to deterministic pretty JSON, and exports it locally:
-  - Native: writes `dam-export.json` to disk.
-  - Web: triggers a browser download.
-  - There is no real SKYVISU/AIXM submission yet.
+- **Download JSON** runs full validation, builds the typed `DamCreation` model,
+  serializes it to deterministic pretty JSON, and exports it locally.
+- **Download AIXM** runs the same validation path and exports the first-pass AIXM
+  XML payload locally.
+- **Send** builds the AIXM payload and then reports that no submission endpoint
+  is configured yet.
 
 ## Validation
 
@@ -208,8 +209,9 @@ edit-time state:
 - Levels export `{ value, unit }` with `unit` as `"FL"` or `"ft"` — no
   normalized feet conversion is included.
 - Sectors export as a sorted list of stable string ids.
-- AIXM remains the eventual delivery format; the same domain model is intended
-  to feed an AIXM renderer once the template is provided.
+- AIXM XML export is generated in `dam-core` from the same domain model. The
+  first-pass generator supports one activation period, static-map fallback
+  geometry, and manual polygon geometry without lateral buffer.
 
 ## Diagnostics
 
@@ -223,7 +225,8 @@ A collapsible developer panel surfaces:
 
 Carried over from the migration plan and not implemented:
 
-- Real SKYVISU submission and AIXM rendering.
+- Real SKYVISU submission endpoint.
+- AIXM lateral-buffer XML geometry and multi-period export.
 - Map groups, Active/Today/Repetitive map management, Modify/Delete lifecycle.
 - Draft save/load, settings screen.
 - Full CWP rendering, transparency/overlap, operational display rules.

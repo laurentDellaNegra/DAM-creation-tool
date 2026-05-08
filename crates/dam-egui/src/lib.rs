@@ -14,8 +14,8 @@ use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime};
 use dam_core::{
     AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, MAX_PERIODS,
     MAX_POLYGON_POINTS, ManualMapCategory, ManualMapRendering, MapCatalog, PreviewGeometry,
-    StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday, build_json_payload,
-    bundled_catalog, switzerland_border_preview, unit_groups,
+    StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday, build_aixm_payload,
+    build_json_payload, bundled_catalog, switzerland_border_preview, unit_groups,
 };
 
 const APP_BG: egui::Color32 = egui::Color32::from_rgb(11, 15, 19);
@@ -360,6 +360,9 @@ impl DamApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Send").clicked() {
                     self.send();
+                }
+                if ui.button("Download AIXM").clicked() {
+                    self.download_aixm();
                 }
                 if ui.button("Download JSON").clicked() {
                     self.download_json();
@@ -1208,7 +1211,7 @@ impl DamApp {
 
     fn send(&mut self) {
         self.submission_status = SubmissionStatus::Building;
-        let payload = match self.build_json_payload_from_form() {
+        let payload = match self.build_aixm_payload_from_form() {
             Ok(payload) => payload,
             Err(status) => {
                 self.submission_status = status;
@@ -1223,6 +1226,19 @@ impl DamApp {
         };
     }
 
+    fn download_aixm(&mut self) {
+        self.submission_status = SubmissionStatus::Building;
+        let payload = match self.build_aixm_payload_from_form() {
+            Ok(payload) => payload,
+            Err(status) => {
+                self.submission_status = status;
+                return;
+            }
+        };
+
+        self.download_payload(payload);
+    }
+
     fn download_json(&mut self) {
         self.submission_status = SubmissionStatus::Building;
         let payload = match self.build_json_payload_from_form() {
@@ -1233,6 +1249,10 @@ impl DamApp {
             }
         };
 
+        self.download_payload(payload);
+    }
+
+    fn download_payload(&mut self, payload: dam_core::SubmissionPayload) {
         self.submission_status = match platform::download_payload(&payload) {
             Ok(path) => SubmissionStatus::Ready {
                 message: format!("Exported {path}"),
@@ -1241,6 +1261,17 @@ impl DamApp {
                 message: format!("Export failed: {message}"),
             },
         };
+    }
+
+    fn build_aixm_payload_from_form(
+        &self,
+    ) -> Result<dam_core::SubmissionPayload, SubmissionStatus> {
+        let creation = self
+            .form
+            .to_creation(&self.catalog)
+            .map_err(SubmissionStatus::Invalid)?;
+
+        build_aixm_payload(&creation).map_err(status_from_export_error)
     }
 
     fn build_json_payload_from_form(

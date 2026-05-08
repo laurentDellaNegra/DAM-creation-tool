@@ -1,7 +1,7 @@
 use super::ExportError;
 use super::aixm::{AixmExportError, to_aixm_xml};
 use super::json::to_pretty_json;
-use crate::DamCreation;
+use crate::{DamCreation, DamMap};
 
 pub const JSON_CONTENT_TYPE: &str = "application/json";
 pub const AIXM_XML_CONTENT_TYPE: &str = "application/xml";
@@ -28,10 +28,34 @@ pub fn build_aixm_payload(creation: &DamCreation) -> Result<SubmissionPayload, E
     })?;
 
     Ok(SubmissionPayload {
-        filename: "dam-aixm.xml".to_owned(),
+        filename: aixm_filename(creation),
         content_type: AIXM_XML_CONTENT_TYPE,
         body,
     })
+}
+
+fn aixm_filename(creation: &DamCreation) -> String {
+    let map_part = match &creation.map {
+        DamMap::Predefined(selected) => sanitize_filename_part(&selected.id),
+        DamMap::Manual(_) => "manual".to_owned(),
+    };
+    format!(
+        "dam-{map_part}-{}.xml",
+        creation.date_range.start.format("%Y%m%d")
+    )
+}
+
+fn sanitize_filename_part(value: &str) -> String {
+    let sanitized = value
+        .trim()
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '-' || *ch == '_')
+        .collect::<String>();
+    if sanitized.is_empty() {
+        "unknown".to_owned()
+    } else {
+        sanitized
+    }
 }
 
 #[cfg(test)]
@@ -108,12 +132,32 @@ mod tests {
     }
 
     #[test]
-    fn aixm_payload_reports_missing_template_for_valid_creation() {
-        let error = build_aixm_payload(&valid_creation()).unwrap_err();
+    fn aixm_payload_uses_expected_filename_content_type_and_body() {
+        let creation = valid_creation();
+        let payload = build_aixm_payload(&creation).unwrap();
+
+        assert_eq!(payload.filename, "dam-50714-20260507.xml");
+        assert_eq!(payload.content_type, AIXM_XML_CONTENT_TYPE);
+        assert_eq!(payload.body, to_aixm_xml(&creation).unwrap());
+    }
+
+    #[test]
+    fn unsupported_aixm_creation_does_not_build_payload() {
+        let mut creation = valid_creation();
+        creation.periods.push(Period {
+            start_indication: true,
+            start_time: NaiveTime::from_hms_opt(11, 0, 0).unwrap(),
+            end_indication: true,
+            end_time: NaiveTime::from_hms_opt(12, 0, 0).unwrap(),
+            lower: Level::new(85, LevelUnit::FlightLevel),
+            upper: Level::new(9_500, LevelUnit::Feet),
+        });
+
+        let error = build_aixm_payload(&creation).unwrap_err();
 
         assert!(matches!(
             error,
-            ExportError::Aixm(AixmExportError::TemplateMissing)
+            ExportError::Aixm(AixmExportError::UnsupportedPeriodCount { count: 2 })
         ));
     }
 }
