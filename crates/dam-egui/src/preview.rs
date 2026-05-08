@@ -83,7 +83,7 @@ impl walkers::Plugin for PreviewOverlay {
         let (ghost_map, ghost_label) =
             if let (Some(coord), Some((state, target))) = (cursor_coord, &self.cursor_preview) {
                 let map = state.preview_with_cursor(*target, coord);
-                let label = if self.display_levels {
+                let label = if self.display_levels && !is_level_label_target(*target) {
                     map.label_position.zip(self.level_label_text.clone())
                 } else {
                     None
@@ -112,25 +112,39 @@ impl walkers::Plugin for PreviewOverlay {
                 {
                     paint_preview_line(painter, projector, anchor, hover_pos);
                 }
-                if next_click.show_distance {
+                let target_rect = if next_click.show_distance {
                     if let Some(anchor) = next_click.anchor {
                         let distance = distance_nm(anchor, cursor_coord);
                         paint_cursor_target_label(
                             painter,
                             hover_pos,
+                            response.rect,
                             &format!("{} · {:.1} NM", next_click.label, distance),
-                        );
+                        )
                     } else {
-                        paint_cursor_target_label(painter, hover_pos, &next_click.label);
+                        paint_cursor_target_label(
+                            painter,
+                            hover_pos,
+                            response.rect,
+                            &next_click.label,
+                        )
                     }
                 } else {
-                    paint_cursor_target_label(painter, hover_pos, &next_click.label);
-                }
+                    paint_cursor_target_label(painter, hover_pos, response.rect, &next_click.label)
+                };
+                paint_cursor_readout_below(painter, response.rect, target_rect, cursor_coord);
+            } else {
+                paint_cursor_readout_near(painter, response.rect, hover_pos, cursor_coord);
             }
-
-            paint_cursor_readout(painter, response.rect, cursor_coord);
         }
     }
+}
+
+fn is_level_label_target(target: ClickTarget) -> bool {
+    matches!(
+        target,
+        ClickTarget::PolygonLabel | ClickTarget::PieLabel | ClickTarget::StripLabel
+    )
 }
 
 fn paint_preview_paths(
@@ -180,7 +194,7 @@ fn paint_manual_map(
         }
         ManualGeometry::ParaSymbol { point } => {
             if let Some(point) = point {
-                paint_para_symbol(painter, projector, *point, color);
+                paint_para_symbol(painter, projector, *point, para_symbol_color());
             }
         }
         ManualGeometry::TextNumber {
@@ -534,6 +548,10 @@ fn category_color(category: ManualMapCategory) -> egui::Color32 {
     }
 }
 
+fn para_symbol_color() -> egui::Color32 {
+    egui::Color32::from_rgb(92, 160, 255)
+}
+
 fn text_color(color: TextNumberColor) -> egui::Color32 {
     match color {
         TextNumberColor::Red => egui::Color32::from_rgb(245, 82, 82),
@@ -563,7 +581,12 @@ fn paint_preview_line(
     painter.line_segment([anchor_pos, cursor_pos], stroke);
 }
 
-fn paint_cursor_target_label(painter: &egui::Painter, cursor_pos: egui::Pos2, label: &str) {
+fn paint_cursor_target_label(
+    painter: &egui::Painter,
+    cursor_pos: egui::Pos2,
+    bounds: egui::Rect,
+    label: &str,
+) -> egui::Rect {
     let position = cursor_pos + egui::vec2(14.0, -22.0);
     let galley = painter.layout_no_wrap(
         label.to_owned(),
@@ -572,7 +595,7 @@ fn paint_cursor_target_label(painter: &egui::Painter, cursor_pos: egui::Pos2, la
     );
     let padding = egui::vec2(6.0, 3.0);
     let size = galley.size() + padding * 2.0;
-    let bg_rect = egui::Rect::from_min_size(position, size);
+    let bg_rect = clamped_popup_rect(bounds, position, size);
     painter.rect_filled(bg_rect, 3.0, egui::Color32::from_black_alpha(200));
     painter.rect_stroke(
         bg_rect,
@@ -580,7 +603,8 @@ fn paint_cursor_target_label(painter: &egui::Painter, cursor_pos: egui::Pos2, la
         egui::Stroke::new(1.0, egui::Color32::from_rgb(170, 200, 220)),
         egui::StrokeKind::Outside,
     );
-    painter.galley(position + padding, galley, egui::Color32::WHITE);
+    painter.galley(bg_rect.min + padding, galley, egui::Color32::WHITE);
+    bg_rect
 }
 
 fn distance_nm(left: Coordinate, right: Coordinate) -> f64 {
@@ -593,16 +617,44 @@ fn distance_nm(left: Coordinate, right: Coordinate) -> f64 {
     EARTH_RADIUS_NM * 2.0 * a.sqrt().atan2((1.0 - a).sqrt())
 }
 
-fn paint_cursor_readout(painter: &egui::Painter, rect: egui::Rect, coordinate: Coordinate) {
+fn paint_cursor_readout_below(
+    painter: &egui::Painter,
+    bounds: egui::Rect,
+    target_rect: egui::Rect,
+    coordinate: Coordinate,
+) {
+    let position = target_rect.left_bottom() + egui::vec2(0.0, 4.0);
+    paint_cursor_readout(painter, bounds, position, coordinate);
+}
+
+fn paint_cursor_readout_near(
+    painter: &egui::Painter,
+    bounds: egui::Rect,
+    cursor_pos: egui::Pos2,
+    coordinate: Coordinate,
+) {
+    paint_cursor_readout(
+        painter,
+        bounds,
+        cursor_pos + egui::vec2(14.0, 2.0),
+        coordinate,
+    );
+}
+
+fn paint_cursor_readout(
+    painter: &egui::Painter,
+    bounds: egui::Rect,
+    position: egui::Pos2,
+    coordinate: Coordinate,
+) {
     let label = format!(
-        "Lon {:>10.5}°  Lat {:>9.5}°",
-        coordinate.lon, coordinate.lat
+        "Lat {:>9.5}°  Lon {:>10.5}°",
+        coordinate.lat, coordinate.lon
     );
     let galley = painter.layout_no_wrap(label, egui::FontId::monospace(12.0), egui::Color32::WHITE);
     let padding = egui::vec2(8.0, 4.0);
     let size = galley.size() + padding * 2.0;
-    let position = egui::pos2(rect.right() - size.x - 8.0, rect.bottom() - size.y - 8.0);
-    let bg_rect = egui::Rect::from_min_size(position, size);
+    let bg_rect = clamped_popup_rect(bounds, position, size);
     painter.rect_filled(bg_rect, 3.0, egui::Color32::from_black_alpha(200));
     painter.rect_stroke(
         bg_rect,
@@ -610,7 +662,22 @@ fn paint_cursor_readout(painter: &egui::Painter, rect: egui::Rect, coordinate: C
         egui::Stroke::new(1.0, egui::Color32::from_rgb(150, 170, 180)),
         egui::StrokeKind::Outside,
     );
-    painter.galley(position + padding, galley, egui::Color32::WHITE);
+    painter.galley(bg_rect.min + padding, galley, egui::Color32::WHITE);
+}
+
+fn clamped_popup_rect(bounds: egui::Rect, position: egui::Pos2, size: egui::Vec2) -> egui::Rect {
+    let margin = 8.0;
+    let min_x = bounds.left() + margin;
+    let min_y = bounds.top() + margin;
+    let max_x = (bounds.right() - size.x - margin).max(min_x);
+    let max_y = (bounds.bottom() - size.y - margin).max(min_y);
+    egui::Rect::from_min_size(
+        egui::pos2(
+            position.x.clamp(min_x, max_x),
+            position.y.clamp(min_y, max_y),
+        ),
+        size,
+    )
 }
 
 fn pie_circle_points(

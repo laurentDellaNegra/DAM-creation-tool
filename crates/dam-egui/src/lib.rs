@@ -141,11 +141,7 @@ impl eframe::App for DamApp {
                     .show_inside(ui, |ui| self.form_panel(ui));
 
                 egui::CentralPanel::default()
-                    .frame(
-                        egui::Frame::new()
-                            .fill(self.frost_theme.palette.background)
-                            .inner_margin(egui::Margin::same(self.frost_theme.spacing.md as i8)),
-                    )
+                    .frame(egui::Frame::new().fill(self.frost_theme.palette.background))
                     .show_inside(ui, |ui| self.preview_panel(ui));
             });
 
@@ -277,17 +273,17 @@ fn colored_segmented(
             response.mark_changed();
         }
 
+        let active_fill = active_fills
+            .get(index)
+            .copied()
+            .unwrap_or(theme.palette.control_fill_on);
         if is_active {
-            let fill = active_fills
-                .get(index)
-                .copied()
-                .unwrap_or(theme.palette.control_fill_on);
             ui.painter()
-                .rect_filled(segment_rect.shrink(gap), inner_radius, fill);
+                .rect_filled(segment_rect.shrink(gap), inner_radius, active_fill);
         }
 
         let text_color = if is_active {
-            egui::Color32::WHITE
+            contrast_text_color(active_fill, theme)
         } else if hovered {
             mix(
                 theme.palette.muted_foreground,
@@ -309,6 +305,18 @@ fn colored_segmented(
     response
 }
 
+fn contrast_text_color(fill: egui::Color32, theme: &Theme) -> egui::Color32 {
+    let luminance = (0.2126 * f32::from(fill.r())
+        + 0.7152 * f32::from(fill.g())
+        + 0.0722 * f32::from(fill.b()))
+        / 255.0;
+    if luminance > 0.62 {
+        theme.palette.background
+    } else {
+        egui::Color32::WHITE
+    }
+}
+
 fn manual_category_color(category: ManualMapCategory) -> egui::Color32 {
     match category {
         ManualMapCategory::Prohibited
@@ -320,6 +328,16 @@ fn manual_category_color(category: ManualMapCategory) -> egui::Color32 {
         ManualMapCategory::Ctr | ManualMapCategory::Cfz | ManualMapCategory::Tma => {
             egui::Color32::from_rgb(104, 116, 132)
         }
+    }
+}
+
+fn text_number_color(color: TextNumberColor) -> egui::Color32 {
+    match color {
+        TextNumberColor::Red => egui::Color32::from_rgb(245, 82, 82),
+        TextNumberColor::Green => egui::Color32::from_rgb(86, 196, 118),
+        TextNumberColor::Blue => egui::Color32::from_rgb(92, 160, 255),
+        TextNumberColor::Yellow => egui::Color32::from_rgb(238, 205, 72),
+        TextNumberColor::White => egui::Color32::WHITE,
     }
 }
 
@@ -620,7 +638,7 @@ impl DamApp {
     ) {
         let theme = self.frost_theme.clone();
         egui::Frame::new()
-            .fill(theme.palette.card)
+            .fill(theme.palette.surface_blur)
             .stroke(egui::Stroke::new(1.0, theme.palette.border))
             .corner_radius(egui::CornerRadius::same(theme.radius.lg))
             .inner_margin(egui::Margin::same(theme.spacing.md as i8))
@@ -633,7 +651,7 @@ impl DamApp {
 
     fn inset_panel(ui: &mut egui::Ui, theme: &Theme, add_contents: impl FnOnce(&mut egui::Ui)) {
         egui::Frame::new()
-            .fill(theme.palette.muted)
+            .fill(theme.palette.surface_blur)
             .stroke(egui::Stroke::new(1.0, theme.palette.border))
             .corner_radius(egui::CornerRadius::same(theme.radius.md))
             .inner_margin(egui::Margin::same(theme.spacing.sm as i8))
@@ -642,7 +660,7 @@ impl DamApp {
 
     fn period_panel(ui: &mut egui::Ui, theme: &Theme, add_contents: impl FnOnce(&mut egui::Ui)) {
         egui::Frame::new()
-            .fill(theme.palette.muted)
+            .fill(theme.palette.surface_blur)
             .stroke(egui::Stroke::new(
                 1.0,
                 mix(theme.palette.border, theme.palette.ring, 0.35),
@@ -767,7 +785,7 @@ impl DamApp {
                         let selected =
                             self.form.selected_map_id.as_deref() == Some(map.id.as_str());
                         let fill = if selected {
-                            mix(theme.palette.card, theme.palette.ring, 0.18)
+                            mix(theme.palette.surface_blur, theme.palette.ring, 0.18)
                         } else {
                             egui::Color32::TRANSPARENT
                         };
@@ -1856,6 +1874,7 @@ fn manual_text_number_ui(ui: &mut egui::Ui, theme: &Theme, text_number: &mut Tex
         text_number_lat_id(),
         text_number_lon_id(),
     );
+    ui.label("Text / number");
     themed_text_edit(
         ui,
         theme,
@@ -1866,18 +1885,27 @@ fn manual_text_number_ui(ui: &mut egui::Ui, theme: &Theme, text_number: &mut Tex
     );
 
     ui.label("Color");
-    ui.horizontal_wrapped(|ui| {
-        for color in TextNumberColor::ALL {
-            selectable_enum(ui, &mut text_number.color, color, color.label());
-        }
-    });
+    let colors = TextNumberColor::ALL;
+    let color_labels = colors.map(TextNumberColor::label);
+    let color_fills = colors.map(text_number_color);
+    let mut selected_color = colors
+        .iter()
+        .position(|color| *color == text_number.color)
+        .unwrap_or(0);
+    if colored_segmented(ui, theme, &color_labels, &color_fills, &mut selected_color).changed() {
+        text_number.color = colors[selected_color];
+    }
 
     ui.label("Size");
-    ui.horizontal(|ui| {
-        for size in TextNumberSize::ALL {
-            selectable_enum(ui, &mut text_number.size, size, size.label());
-        }
-    });
+    let sizes = TextNumberSize::ALL;
+    let size_labels = sizes.map(TextNumberSize::label);
+    let mut selected_size = sizes
+        .iter()
+        .position(|size| *size == text_number.size)
+        .unwrap_or(0);
+    if segmented(ui, theme, &size_labels, &mut selected_size).changed() {
+        text_number.size = sizes[selected_size];
+    }
 }
 
 fn manual_pie_circle_ui(ui: &mut egui::Ui, theme: &Theme, pie: &mut PieCircleDraftState) {
@@ -2045,12 +2073,6 @@ fn numeric_field_ui_with_id(
             egui::Stroke::new(2.0, FOCUS_HIGHLIGHT),
             egui::StrokeKind::Outside,
         );
-    }
-}
-
-fn selectable_enum<T: Copy + PartialEq>(ui: &mut egui::Ui, value: &mut T, option: T, label: &str) {
-    if ui.selectable_label(*value == option, label).clicked() {
-        *value = option;
     }
 }
 

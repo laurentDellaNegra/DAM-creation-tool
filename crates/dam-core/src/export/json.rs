@@ -93,7 +93,8 @@ pub enum ExportMap {
         name: String,
         geometry: ExportManualGeometry,
         attributes: ManualMapAttributes,
-        label_position: crate::Coordinate,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        label_position: Option<crate::Coordinate>,
     },
 }
 
@@ -115,9 +116,7 @@ impl From<&ManualMap> for ExportMap {
             name: manual.name.clone(),
             geometry: ExportManualGeometry::from(&manual.geometry),
             attributes: manual.attributes.clone(),
-            label_position: manual
-                .label_position
-                .expect("manual maps are validated before export"),
+            label_position: manual.label_position,
         }
     }
 }
@@ -246,6 +245,7 @@ mod tests {
     use crate::{
         AltitudeCorrection, BufferFilter, Coordinate, DateRange, DistributionSelection, Level,
         LevelUnit, ManualMapCategory, ManualMapRendering, Period, SelectedStaticMap, TextInfo,
+        TextNumberColor, TextNumberSize,
     };
     use chrono::{NaiveDate, NaiveTime};
     use std::collections::BTreeSet;
@@ -350,5 +350,32 @@ mod tests {
         assert!(json.contains(r#""rendering": "line""#));
         assert!(json.contains(r#""lateral_buffer_nm": 2.5"#));
         assert!(json.contains(r#""display_levels": true"#));
+    }
+
+    #[test]
+    fn exports_manual_text_number_without_level_label_position() {
+        let creation = valid_creation(DamMap::Manual(ManualMap {
+            name: "Manual text".to_owned(),
+            geometry: ManualGeometry::TextNumber {
+                point: Some(Coordinate {
+                    lon: 7.0,
+                    lat: 46.0,
+                }),
+                text: "TXT".to_owned(),
+                color: TextNumberColor::Blue,
+                size: TextNumberSize::Medium,
+            },
+            attributes: ManualMapAttributes {
+                category: ManualMapCategory::Other,
+                rendering: ManualMapRendering::Line,
+                lateral_buffer_nm: 0.0,
+            },
+            label_position: None,
+        }));
+
+        let json = to_pretty_json(&creation).unwrap();
+
+        assert!(json.contains(r#""kind": "text_number""#));
+        assert!(!json.contains("label_position"));
     }
 }

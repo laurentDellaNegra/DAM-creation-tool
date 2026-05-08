@@ -233,8 +233,7 @@ impl ManualMapState {
     pub fn label_position(&self) -> Option<Coordinate> {
         match self.geometry_type {
             ManualGeometryType::Polygon => self.polygon.label_position(),
-            ManualGeometryType::ParaSymbol => self.para_symbol.silent_coordinate(),
-            ManualGeometryType::TextNumber => self.text_number.point.silent_coordinate(),
+            ManualGeometryType::ParaSymbol | ManualGeometryType::TextNumber => None,
             ManualGeometryType::PieCircle => self.pie_circle.label_position(),
             ManualGeometryType::Strip => self.strip.label_position(),
         }
@@ -544,10 +543,6 @@ impl PointDraftState {
     fn coordinate(&self, field: &str, issues: &mut Vec<ValidationIssue>) -> Option<Coordinate> {
         self.point.coordinate(field, issues)
     }
-
-    fn silent_coordinate(&self) -> Option<Coordinate> {
-        self.point.silent_coordinate()
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -828,11 +823,20 @@ impl DamFormState {
             return Err(issues);
         }
 
+        let display_levels = self.display_levels
+            && !matches!(
+                (self.map_mode, self.manual.geometry_type),
+                (
+                    MapMode::Manual,
+                    ManualGeometryType::ParaSymbol | ManualGeometryType::TextNumber
+                )
+            );
+
         Ok(DamCreation {
             map,
             date_range,
             periods,
-            display_levels: self.display_levels,
+            display_levels,
             altitude_correction: self.altitude_correction,
             upper_buffer: self.upper_buffer,
             lower_buffer: self.lower_buffer,

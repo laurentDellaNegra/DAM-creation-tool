@@ -158,17 +158,30 @@ fn validate_manual_map(manual: &ManualMap, issues: &mut Vec<ValidationIssue>) {
         ));
     }
 
-    if let Some(label) = manual.label_position {
+    if manual_geometry_uses_level_label(&manual.geometry) {
+        if let Some(label) = manual.label_position {
+            validate_coordinate(label, "map.label_position", issues);
+        } else {
+            issues.push(ValidationIssue::new(
+                "map.label_position",
+                "Level label position is required.",
+            ));
+        }
+    } else if let Some(label) = manual.label_position {
         validate_coordinate(label, "map.label_position", issues);
-    } else {
-        issues.push(ValidationIssue::new(
-            "map.label_position",
-            "Level label position is required.",
-        ));
     }
 
     validate_manual_attributes(manual, issues);
     validate_manual_geometry(&manual.geometry, issues);
+}
+
+fn manual_geometry_uses_level_label(geometry: &ManualGeometry) -> bool {
+    matches!(
+        geometry,
+        ManualGeometry::Polygon { .. }
+            | ManualGeometry::PieCircle { .. }
+            | ManualGeometry::Strip { .. }
+    )
 }
 
 fn validate_manual_attributes(manual: &ManualMap, issues: &mut Vec<ValidationIssue>) {
@@ -489,6 +502,28 @@ mod tests {
     }
 
     #[test]
+    fn rejects_manual_polygon_without_label_position() {
+        let mut creation = valid_creation();
+        let mut map = manual_map(ManualGeometry::Polygon {
+            nodes: vec![
+                PolygonNode::point(coordinate(7.0, 46.0)),
+                PolygonNode::point(coordinate(7.2, 46.0)),
+                PolygonNode::point(coordinate(7.2, 46.2)),
+            ],
+        });
+        map.label_position = None;
+        creation.map = DamMap::Manual(map);
+
+        let err = validate_creation(&creation).unwrap_err();
+
+        assert!(
+            err.issues
+                .iter()
+                .any(|issue| issue.field == "map.label_position")
+        );
+    }
+
+    #[test]
     fn rejects_incomplete_manual_polygon() {
         let mut creation = valid_creation();
         creation.map = DamMap::Manual(manual_map(ManualGeometry::Polygon {
@@ -546,6 +581,28 @@ mod tests {
                     .iter()
                     .any(|issue| issue.field == "map.geometry.point")
             );
+        }
+    }
+
+    #[test]
+    fn accepts_manual_point_geometries_without_level_label_position() {
+        for geometry in [
+            ManualGeometry::ParaSymbol {
+                point: Some(coordinate(7.0, 46.0)),
+            },
+            ManualGeometry::TextNumber {
+                point: Some(coordinate(7.0, 46.0)),
+                text: "TXT".to_owned(),
+                color: TextNumberColor::Red,
+                size: TextNumberSize::Medium,
+            },
+        ] {
+            let mut creation = valid_creation();
+            let mut map = manual_map(geometry);
+            map.label_position = None;
+            creation.map = DamMap::Manual(map);
+
+            assert!(validate_creation(&creation).is_ok());
         }
     }
 
