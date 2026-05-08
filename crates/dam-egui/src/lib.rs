@@ -135,7 +135,7 @@ impl eframe::App for DamApp {
                     .size_range(420.0..=760.0)
                     .frame(
                         egui::Frame::new()
-                            .fill(self.frost_theme.palette.card)
+                            .fill(self.frost_theme.palette.background)
                             .inner_margin(egui::Margin::same(self.frost_theme.spacing.md as i8)),
                     )
                     .show_inside(ui, |ui| self.form_panel(ui));
@@ -1237,7 +1237,6 @@ impl DamApp {
     }
 
     fn preview_panel(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Map Preview");
         let selected_map = if self.form.map_mode == MapMode::Predefined {
             self.form.selected_map(&self.catalog)
         } else {
@@ -1248,27 +1247,6 @@ impl DamApp {
         } else {
             None
         };
-
-        if let Some(map) = selected_map {
-            ui.strong(map.label());
-            if let Some(description) = &map.description {
-                ui.label(description);
-            }
-        } else if let Some(manual_map) = &manual_map {
-            ui.strong(if manual_map.name.trim().is_empty() {
-                "Manual DAM map"
-            } else {
-                manual_map.name.as_str()
-            });
-            if self.pending_click_target.is_some() {
-                ui.label("Click the preview to fill the focused field.");
-            } else {
-                ui.label("Focus a coordinate or distance field to enable map placement.");
-            }
-        } else {
-            ui.strong("Online dark map");
-            ui.label("No DAM map selected.");
-        }
 
         let selected_paths = selected_map
             .map(|map| map.preview.paths.clone())
