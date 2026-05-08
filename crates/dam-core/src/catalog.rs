@@ -5,8 +5,12 @@ use serde_json::Value;
 use std::path::Path;
 
 static MAPS_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../assets/maps");
-static SWITZERLAND_BORDER_SOURCE: &str =
-    include_str!("../../../assets/preview/switzerland-border.geojson");
+const SWITZERLAND_DEFAULT_BBOX: BoundingBox = BoundingBox {
+    min_lon: 5.9559,
+    min_lat: 45.8179,
+    max_lon: 10.4921,
+    max_lat: 47.8084,
+};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct MapCatalog {
@@ -50,8 +54,11 @@ pub fn bundled_catalog() -> MapCatalog {
     MapCatalog::from_entries(entries)
 }
 
-pub fn switzerland_border_preview() -> PreviewGeometry {
-    parse_preview_geometry(SWITZERLAND_BORDER_SOURCE).unwrap_or_default()
+pub fn switzerland_default_preview() -> PreviewGeometry {
+    PreviewGeometry {
+        paths: Vec::new(),
+        bbox: Some(SWITZERLAND_DEFAULT_BBOX),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -172,17 +179,6 @@ fn parse_static_map(path: &str, source: &str) -> Result<StaticMap, String> {
         preview,
         defaults,
     })
-}
-
-fn parse_preview_geometry(source: &str) -> Result<PreviewGeometry, String> {
-    let value: Value =
-        serde_json::from_str(source).map_err(|error| format!("invalid JSON: {error}"))?;
-
-    if value.get("type").and_then(Value::as_str) != Some("FeatureCollection") {
-        return Err("expected GeoJSON FeatureCollection".to_owned());
-    }
-
-    Ok(preview_geometry_from_value(&value))
 }
 
 fn preview_geometry_from_value(value: &Value) -> PreviewGeometry {
@@ -425,11 +421,14 @@ mod tests {
     }
 
     #[test]
-    fn loads_switzerland_border_preview() {
-        let preview = switzerland_border_preview();
+    fn loads_switzerland_default_preview() {
+        let preview = switzerland_default_preview();
 
-        assert_eq!(preview.paths.len(), 1);
+        assert!(preview.paths.is_empty());
         assert!(preview.bbox.is_some());
+        let center = preview.bbox.expect("default bbox").center();
+        assert!((center.lon - 8.224).abs() < 0.01);
+        assert!((center.lat - 46.813).abs() < 0.01);
     }
 
     #[test]

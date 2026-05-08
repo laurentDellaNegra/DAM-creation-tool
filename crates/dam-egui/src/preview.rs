@@ -53,7 +53,6 @@ impl walkers::Plugin for PreviewOverlay {
         _map_memory: &walkers::MapMemory,
     ) {
         let painter = ui.painter();
-        painter.rect_filled(response.rect, 0.0, egui::Color32::from_rgb(8, 11, 14));
 
         paint_preview_paths(
             painter,
@@ -524,9 +523,9 @@ fn project(projector: &walkers::Projector, coordinate: Coordinate) -> egui::Pos2
 
 fn category_color(category: ManualMapCategory) -> egui::Color32 {
     match category {
-        ManualMapCategory::Danger | ManualMapCategory::Restricted => {
-            egui::Color32::from_rgb(235, 87, 87)
-        }
+        ManualMapCategory::Prohibited
+        | ManualMapCategory::Danger
+        | ManualMapCategory::Restricted => egui::Color32::from_rgb(235, 87, 87),
         ManualMapCategory::Glider => egui::Color32::from_rgb(76, 175, 118),
         ManualMapCategory::Ctr | ManualMapCategory::Tma | ManualMapCategory::Para => {
             egui::Color32::from_rgb(91, 153, 234)

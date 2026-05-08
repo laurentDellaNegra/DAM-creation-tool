@@ -146,9 +146,9 @@ Three independent segmented selectors:
 ## Map Preview
 
 - Docked, non-floating panel powered by `walkers`.
-- Plain dark background (PMTiles wiring is stubbed; the diagnostics panel
-  reports when no PMTiles is configured).
-- Always renders a Switzerland country-border overlay as context.
+- Online CARTO Dark Matter raster tiles provide the map background.
+- The default empty-state viewport remains centered on Switzerland without a
+  country-border GeoJSON overlay.
 - For predefined maps: renders the selected map’s GeoJSON paths
   (LineString / MultiLineString / Polygon / MultiPolygon) in accent color.
 - For manual maps: renders the in-progress geometry, including a ghost preview
@@ -218,7 +218,7 @@ edit-time state:
 A collapsible developer panel surfaces:
 
 - Catalog parse warnings/errors per file.
-- PMTiles configuration status (currently the dark fallback notice).
+- Online tile source status.
 - Build/version info (`CARGO_PKG_VERSION`).
 
 ## Known Out-of-Scope (First Version)

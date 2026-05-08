@@ -203,6 +203,7 @@ impl Default for ManualMapAttributes {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ManualMapCategory {
+    Prohibited,
     Danger,
     Restricted,
     Glider,
@@ -214,7 +215,8 @@ pub enum ManualMapCategory {
 }
 
 impl ManualMapCategory {
-    pub const ALL: [ManualMapCategory; 8] = [
+    pub const ALL: [ManualMapCategory; 9] = [
+        ManualMapCategory::Prohibited,
         ManualMapCategory::Danger,
         ManualMapCategory::Restricted,
         ManualMapCategory::Glider,
@@ -227,6 +229,7 @@ impl ManualMapCategory {
 
     pub fn label(self) -> &'static str {
         match self {
+            ManualMapCategory::Prohibited => "Prohibited",
             ManualMapCategory::Danger => "Danger",
             ManualMapCategory::Restricted => "Restricted",
             ManualMapCategory::Glider => "Glider",

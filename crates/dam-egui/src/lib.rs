@@ -1,4 +1,6 @@
 mod form;
+mod frost_night;
+mod online_tiles;
 mod platform;
 mod preview;
 mod submission;
@@ -8,6 +10,15 @@ use crate::form::{
     ManualGeometryType, MapMode, PeriodRowState, PieCircleDraftState, PolygonDraftState,
     PolygonNodeDraft, StripDraftState, TextNumberDraftState, geometry_supports_buffer,
 };
+use crate::frost_night::components::{checkbox as frost_checkbox, segmented};
+use crate::frost_night::composites::{ToolbarAction, top_toolbar_with_id};
+use crate::frost_night::containers::{DragCardState, drag_card, tabs_with_id};
+use crate::frost_night::icons::{ICON_BOOK_OPEN, ICON_CIRCLE_X, ICON_GLOBE, ICON_PLANE};
+use crate::frost_night::theme::mix;
+use crate::frost_night::{
+    ControlSize, ControlVariant, FrostUiExt, InstallThemeOptions, Theme, install_theme,
+};
+use crate::online_tiles::CartoDarkMatter;
 use crate::preview::PreviewOverlay;
 use crate::submission::{SubmissionEndpoint, SubmissionResult, SubmissionStatus, submit_payload};
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime};
@@ -15,23 +26,19 @@ use dam_core::{
     AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, MAX_PERIODS,
     MAX_POLYGON_POINTS, ManualMapCategory, ManualMapRendering, MapCatalog, PreviewGeometry,
     StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday, build_aixm_payload,
-    build_json_payload, bundled_catalog, switzerland_border_preview, unit_groups,
+    build_json_payload, bundled_catalog, switzerland_default_preview, unit_groups,
 };
 
-const APP_BG: egui::Color32 = egui::Color32::from_rgb(11, 15, 19);
-const PANEL_BG: egui::Color32 = egui::Color32::from_rgb(17, 23, 30);
-const SECTION_BG: egui::Color32 = egui::Color32::from_rgb(19, 27, 35);
-const SECTION_STROKE: egui::Color32 = egui::Color32::from_rgb(45, 59, 74);
-const SUBSECTION_BG: egui::Color32 = egui::Color32::from_rgb(14, 20, 27);
-const ACCENT: egui::Color32 = egui::Color32::from_rgb(95, 200, 205);
-
 pub struct DamApp {
+    frost_theme: Theme,
     catalog: MapCatalog,
     default_preview: PreviewGeometry,
     form: DamFormState,
     selected_period: usize,
     map_memory: walkers::MapMemory,
+    map_tiles: walkers::HttpTiles,
     show_distribution: bool,
+    distribution_card: DragCardState,
     show_reset_confirm: bool,
     active_date_picker: Option<DateField>,
     date_picker_month: NaiveDate,
@@ -41,6 +48,15 @@ pub struct DamApp {
     pending_click_target: Option<ClickTarget>,
     previous_active_geometry: Option<ManualGeometryType>,
 }
+
+const MANUAL_ATTRIBUTE_CATEGORIES: [ManualMapCategory; 6] = [
+    ManualMapCategory::Prohibited,
+    ManualMapCategory::Restricted,
+    ManualMapCategory::Danger,
+    ManualMapCategory::Glider,
+    ManualMapCategory::Para,
+    ManualMapCategory::Other,
+];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DateField {
@@ -66,10 +82,11 @@ impl DateField {
 
 impl DamApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        configure_visuals(&cc.egui_ctx);
+        let frost_theme = Theme::dark();
+        configure_visuals(&cc.egui_ctx, &frost_theme);
 
         let catalog = bundled_catalog();
-        let default_preview = switzerland_border_preview();
+        let default_preview = switzerland_default_preview();
         let form = DamFormState::new(&catalog);
         let mut map_memory = walkers::MapMemory::default();
         if let Some(map) = form.selected_map(&catalog) {
@@ -79,12 +96,18 @@ impl DamApp {
         }
 
         Self {
+            frost_theme,
             catalog,
             default_preview,
             form,
             selected_period: 0,
             map_memory,
+            map_tiles: walkers::HttpTiles::new(CartoDarkMatter, cc.egui_ctx.clone()),
             show_distribution: false,
+            distribution_card: DragCardState {
+                pos: egui::pos2(96.0, 96.0),
+                size: egui::vec2(456.0, 520.0),
+            },
             show_reset_confirm: false,
             active_date_picker: None,
             date_picker_month: first_day_of_month(current_date()),
@@ -104,36 +127,200 @@ impl eframe::App for DamApp {
         self.update_click_target_from_memory(ui.ctx());
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(APP_BG))
+            .frame(egui::Frame::new().fill(self.frost_theme.palette.background))
             .show_inside(ui, |ui| {
-                egui::Panel::top("toolbar")
-                    .frame(egui::Frame::new().fill(PANEL_BG))
-                    .show_inside(ui, |ui| self.toolbar(ui));
-
                 egui::Panel::left("creation_form")
                     .resizable(true)
                     .default_size(500.0)
                     .size_range(420.0..=760.0)
-                    .frame(egui::Frame::new().fill(PANEL_BG).inner_margin(12))
+                    .frame(
+                        egui::Frame::new()
+                            .fill(self.frost_theme.palette.card)
+                            .inner_margin(egui::Margin::same(self.frost_theme.spacing.md as i8)),
+                    )
                     .show_inside(ui, |ui| self.form_panel(ui));
 
                 egui::CentralPanel::default()
-                    .frame(egui::Frame::new().fill(APP_BG).inner_margin(12))
+                    .frame(
+                        egui::Frame::new()
+                            .fill(self.frost_theme.palette.background)
+                            .inner_margin(egui::Margin::same(self.frost_theme.spacing.md as i8)),
+                    )
                     .show_inside(ui, |ui| self.preview_panel(ui));
             });
 
+        self.toolbar(ui.ctx());
         self.distribution_window(ui.ctx());
         self.reset_confirmation(ui.ctx());
         self.date_picker_window(ui.ctx());
     }
 }
 
-fn configure_visuals(ctx: &egui::Context) {
-    ctx.set_visuals(egui::Visuals::dark());
+fn configure_visuals(ctx: &egui::Context, theme: &Theme) {
+    install_theme(
+        ctx,
+        theme,
+        InstallThemeOptions {
+            install_visuals: true,
+            install_fonts: true,
+        },
+    );
+
     let mut style = (*ctx.global_style()).clone();
-    style.spacing.item_spacing = egui::vec2(8.0, 8.0);
-    style.spacing.button_padding = egui::vec2(10.0, 6.0);
+    style.spacing.item_spacing = egui::vec2(theme.spacing.sm, theme.spacing.sm);
+    style.spacing.button_padding = ControlSize::Md.padding();
     ctx.set_global_style(style);
+}
+
+fn themed_text_edit(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    text_edit: egui::TextEdit<'_>,
+    size: ControlSize,
+) -> egui::Response {
+    themed_text_edit_enabled(ui, theme, true, text_edit, size)
+}
+
+fn themed_text_edit_enabled(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    enabled: bool,
+    text_edit: egui::TextEdit<'_>,
+    size: ControlSize,
+) -> egui::Response {
+    let visuals = theme.input(size);
+    ui.scope(|ui| {
+        let style = ui.style_mut();
+        style.visuals.extreme_bg_color = visuals.bg;
+        style.visuals.widgets.inactive.bg_stroke = visuals.border;
+        style.visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, theme.palette.ring);
+        style.visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, theme.palette.ring);
+
+        ui.add_enabled(
+            enabled,
+            text_edit
+                .font(visuals.font)
+                .text_color(visuals.text_color)
+                .margin(egui::Margin::symmetric(theme.spacing.sm as i8, 6)),
+        )
+    })
+    .inner
+}
+
+fn colored_segmented(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    labels: &[&str],
+    active_fills: &[egui::Color32],
+    selected: &mut usize,
+) -> egui::Response {
+    let font = egui::FontId::proportional(12.0);
+    let pad = egui::vec2(theme.spacing.lg, theme.spacing.xs + 2.0);
+    let gap = theme.control_gap;
+
+    let galleys: Vec<_> = labels
+        .iter()
+        .map(|label| {
+            ui.painter()
+                .layout_no_wrap(label.to_string(), font.clone(), theme.palette.foreground)
+        })
+        .collect();
+    let segment_widths: Vec<f32> = galleys
+        .iter()
+        .map(|galley| galley.size().x + pad.x * 2.0)
+        .collect();
+    let total_width = segment_widths.iter().sum();
+    let height = galleys
+        .iter()
+        .map(|galley| galley.size().y)
+        .fold(0.0_f32, f32::max)
+        + pad.y * 2.0;
+
+    let (outer_rect, mut response) =
+        ui.allocate_exact_size(egui::vec2(total_width, height), egui::Sense::click());
+
+    if !ui.is_rect_visible(outer_rect) {
+        return response;
+    }
+
+    let outer_radius = egui::CornerRadius::same(theme.radius.lg);
+    let inner_radius = egui::CornerRadius::same(theme.radius.md);
+    ui.painter().rect_stroke(
+        outer_rect,
+        outer_radius,
+        egui::Stroke::new(1.0, theme.palette.control_border),
+        egui::StrokeKind::Inside,
+    );
+
+    let clicked_pos = if ui.is_enabled() && response.clicked() {
+        response.interact_pointer_pos()
+    } else {
+        None
+    };
+    let mut x = outer_rect.left();
+    for (index, galley) in galleys.into_iter().enumerate() {
+        let segment_rect = egui::Rect::from_min_size(
+            egui::pos2(x, outer_rect.top()),
+            egui::vec2(segment_widths[index], height),
+        );
+        let is_active = index == *selected;
+        let hovered = response.hovered()
+            && response
+                .hover_pos()
+                .is_some_and(|pos| segment_rect.contains(pos));
+
+        if let Some(pos) = clicked_pos
+            && segment_rect.contains(pos)
+            && !is_active
+        {
+            *selected = index;
+            response.mark_changed();
+        }
+
+        if is_active {
+            let fill = active_fills
+                .get(index)
+                .copied()
+                .unwrap_or(theme.palette.control_fill_on);
+            ui.painter()
+                .rect_filled(segment_rect.shrink(gap), inner_radius, fill);
+        }
+
+        let text_color = if is_active {
+            egui::Color32::WHITE
+        } else if hovered {
+            mix(
+                theme.palette.muted_foreground,
+                theme.palette.foreground,
+                0.3,
+            )
+        } else {
+            theme.palette.muted_foreground
+        };
+        let text_pos = egui::pos2(
+            segment_rect.center().x - galley.size().x / 2.0,
+            segment_rect.center().y - galley.size().y / 2.0,
+        );
+        ui.painter().galley(text_pos, galley, text_color);
+
+        x += segment_widths[index];
+    }
+
+    response
+}
+
+fn manual_category_color(category: ManualMapCategory) -> egui::Color32 {
+    match category {
+        ManualMapCategory::Prohibited
+        | ManualMapCategory::Restricted
+        | ManualMapCategory::Danger => egui::Color32::from_rgb(185, 47, 47),
+        ManualMapCategory::Glider => egui::Color32::from_rgb(38, 128, 83),
+        ManualMapCategory::Para => egui::Color32::from_rgb(48, 108, 184),
+        ManualMapCategory::Other => egui::Color32::from_rgb(104, 116, 132),
+        ManualMapCategory::Ctr | ManualMapCategory::Cfz | ManualMapCategory::Tma => {
+            egui::Color32::from_rgb(104, 116, 132)
+        }
+    }
 }
 
 fn center_map_on_static_map(map_memory: &mut walkers::MapMemory, map: &StaticMap) {
@@ -352,26 +539,52 @@ impl DamApp {
         }
     }
 
-    fn toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.heading("DAM Creation Tool");
-            ui.separator();
-            ui.label("Map creation");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Send").clicked() {
-                    self.send();
-                }
-                if ui.button("Download AIXM").clicked() {
-                    self.download_aixm();
-                }
-                if ui.button("Download JSON").clicked() {
-                    self.download_json();
-                }
-                if ui.button("Reset").clicked() {
-                    self.show_reset_confirm = true;
+    fn toolbar(&mut self, ctx: &egui::Context) {
+        let margin = self.frost_theme.spacing.md;
+        egui::Area::new(egui::Id::new("dam_action_toolbar"))
+            .order(egui::Order::Foreground)
+            .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-margin, margin))
+            .show(ctx, |ui| {
+                let response = top_toolbar_with_id(
+                    ui,
+                    &self.frost_theme,
+                    "dam-action-toolbar",
+                    &[
+                        ToolbarAction {
+                            icon: ICON_PLANE,
+                            tooltip: "Send",
+                            selected: false,
+                            disabled: false,
+                        },
+                        ToolbarAction {
+                            icon: ICON_GLOBE,
+                            tooltip: "Download AIXM",
+                            selected: false,
+                            disabled: false,
+                        },
+                        ToolbarAction {
+                            icon: ICON_BOOK_OPEN,
+                            tooltip: "Download JSON",
+                            selected: false,
+                            disabled: false,
+                        },
+                        ToolbarAction {
+                            icon: ICON_CIRCLE_X,
+                            tooltip: "Reset",
+                            selected: false,
+                            disabled: false,
+                        },
+                    ],
+                );
+
+                match response.icon_clicked {
+                    Some(0) => self.send(),
+                    Some(1) => self.download_aixm(),
+                    Some(2) => self.download_json(),
+                    Some(3) => self.show_reset_confirm = true,
+                    _ => {}
                 }
             });
-        });
     }
 
     fn form_panel(&mut self, ui: &mut egui::Ui) {
@@ -405,66 +618,83 @@ impl DamApp {
         title: &str,
         add_contents: impl FnOnce(&mut Self, &mut egui::Ui),
     ) {
+        let theme = self.frost_theme.clone();
         egui::Frame::new()
-            .fill(SECTION_BG)
-            .stroke(egui::Stroke::new(1.0, SECTION_STROKE))
-            .inner_margin(12)
+            .fill(theme.palette.card)
+            .stroke(egui::Stroke::new(1.0, theme.palette.border))
+            .corner_radius(egui::CornerRadius::same(theme.radius.lg))
+            .inner_margin(egui::Margin::same(theme.spacing.md as i8))
             .show(ui, |ui| {
-                section_heading(ui, title);
+                section_heading(ui, &theme, title);
                 add_contents(self, ui);
             });
-        ui.add_space(10.0);
+        ui.add_space(theme.spacing.sm);
     }
 
-    fn inset_panel(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui)) {
+    fn inset_panel(ui: &mut egui::Ui, theme: &Theme, add_contents: impl FnOnce(&mut egui::Ui)) {
         egui::Frame::new()
-            .fill(SUBSECTION_BG)
-            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(31, 43, 55)))
-            .inner_margin(10)
+            .fill(theme.palette.muted)
+            .stroke(egui::Stroke::new(1.0, theme.palette.border))
+            .corner_radius(egui::CornerRadius::same(theme.radius.md))
+            .inner_margin(egui::Margin::same(theme.spacing.sm as i8))
+            .show(ui, add_contents);
+    }
+
+    fn period_panel(ui: &mut egui::Ui, theme: &Theme, add_contents: impl FnOnce(&mut egui::Ui)) {
+        egui::Frame::new()
+            .fill(theme.palette.muted)
+            .stroke(egui::Stroke::new(
+                1.0,
+                mix(theme.palette.border, theme.palette.ring, 0.35),
+            ))
+            .corner_radius(egui::CornerRadius::same(theme.radius.lg))
+            .inner_margin(egui::Margin::same(theme.spacing.md as i8))
             .show(ui, add_contents);
     }
 
     fn selected_map_summary(&self, ui: &mut egui::Ui) {
-        Self::inset_panel(ui, |ui| match self.form.selected_map(&self.catalog) {
-            Some(map) => {
-                egui::Grid::new("selected_map_summary")
-                    .num_columns(2)
-                    .spacing([12.0, 6.0])
-                    .show(ui, |ui| {
-                        ui.label("ID");
-                        ui.monospace(&map.id);
-                        ui.end_row();
-                        ui.label("Name");
-                        ui.strong(&map.name);
-                        ui.end_row();
-                        if let Some(description) = &map.description {
-                            ui.label("Description");
-                            ui.label(description);
+        Self::inset_panel(ui, &self.frost_theme, |ui| {
+            match self.form.selected_map(&self.catalog) {
+                Some(map) => {
+                    egui::Grid::new("selected_map_summary")
+                        .num_columns(2)
+                        .spacing([12.0, 6.0])
+                        .show(ui, |ui| {
+                            ui.label("ID");
+                            ui.monospace(&map.id);
                             ui.end_row();
-                        }
-                    });
-            }
-            None => {
-                ui.colored_label(egui::Color32::LIGHT_YELLOW, "No DAM map selected.");
+                            ui.label("Name");
+                            ui.strong(&map.name);
+                            ui.end_row();
+                            if let Some(description) = &map.description {
+                                ui.label("Description");
+                                ui.label(description);
+                                ui.end_row();
+                            }
+                        });
+                }
+                None => {
+                    ui.colored_label(self.frost_theme.palette.ring, "No DAM map selected.");
+                }
             }
         });
     }
 
     fn map_section(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            selectable_enum(
-                ui,
-                &mut self.form.map_mode,
-                MapMode::Predefined,
-                MapMode::Predefined.label(),
-            );
-            selectable_enum(
-                ui,
-                &mut self.form.map_mode,
-                MapMode::Manual,
-                MapMode::Manual.label(),
-            );
-        });
+        let modes = [MapMode::Predefined, MapMode::Manual];
+        let labels = modes.map(MapMode::label);
+        let mut selected = modes
+            .iter()
+            .position(|mode| *mode == self.form.map_mode)
+            .unwrap_or(0);
+        tabs_with_id(
+            ui,
+            &self.frost_theme,
+            "map-mode-tabs",
+            &mut selected,
+            &labels,
+        );
+        self.form.map_mode = modes[selected];
 
         ui.add_space(8.0);
 
@@ -477,7 +707,7 @@ impl DamApp {
     fn predefined_map_section(&mut self, ui: &mut egui::Ui) {
         if self.catalog.maps.is_empty() {
             ui.colored_label(
-                egui::Color32::LIGHT_RED,
+                self.frost_theme.palette.destructive,
                 "No bundled GeoJSON maps were found in assets/maps.",
             );
             return;
@@ -489,10 +719,13 @@ impl DamApp {
                 ui.label(format!("{} available", self.catalog.maps.len()));
             });
         });
-        ui.add(
+        themed_text_edit(
+            ui,
+            &self.frost_theme,
             egui::TextEdit::singleline(&mut self.form.map_search)
                 .hint_text("Search by id, name, or description")
                 .desired_width(f32::INFINITY),
+            ControlSize::Md,
         );
 
         let filter = self.form.map_search.to_lowercase();
@@ -519,8 +752,9 @@ impl DamApp {
             ui.label(format!("{} match(es)", filtered.len()));
         });
 
+        let theme = self.frost_theme.clone();
         let mut selected_after = None;
-        Self::inset_panel(ui, |ui| {
+        Self::inset_panel(ui, &theme, |ui| {
             egui::ScrollArea::vertical()
                 .max_height(220.0)
                 .auto_shrink([false, false])
@@ -533,25 +767,28 @@ impl DamApp {
                         let selected =
                             self.form.selected_map_id.as_deref() == Some(map.id.as_str());
                         let fill = if selected {
-                            egui::Color32::from_rgb(18, 43, 50)
+                            mix(theme.palette.card, theme.palette.ring, 0.18)
                         } else {
                             egui::Color32::TRANSPARENT
                         };
                         let stroke = if selected {
-                            egui::Stroke::new(1.0, ACCENT)
+                            egui::Stroke::new(1.0, theme.palette.ring)
                         } else {
                             egui::Stroke::new(1.0, egui::Color32::TRANSPARENT)
                         };
                         let label = if selected {
-                            egui::RichText::new(map.label()).strong().color(ACCENT)
-                        } else {
                             egui::RichText::new(map.label())
+                                .strong()
+                                .color(theme.palette.ring)
+                        } else {
+                            egui::RichText::new(map.label()).color(theme.palette.foreground)
                         };
 
                         let item = egui::Frame::new()
                             .fill(fill)
                             .stroke(stroke)
-                            .inner_margin(8)
+                            .corner_radius(egui::CornerRadius::same(theme.radius.md))
+                            .inner_margin(egui::Margin::same(theme.spacing.sm as i8))
                             .show(ui, |ui| {
                                 ui.label(label);
                                 if let Some(description) = &map.description {
@@ -588,31 +825,41 @@ impl DamApp {
     }
 
     fn manual_map_section(&mut self, ui: &mut egui::Ui) {
+        let theme = self.frost_theme.clone();
         ui.label("Map name");
-        ui.add(egui::TextEdit::singleline(&mut self.form.manual.name).desired_width(f32::INFINITY));
+        themed_text_edit(
+            ui,
+            &theme,
+            egui::TextEdit::singleline(&mut self.form.manual.name).desired_width(f32::INFINITY),
+            ControlSize::Md,
+        );
 
-        ui.add_space(8.0);
+        ui.add_space(theme.spacing.sm);
         ui.label("Geometry type");
-        ui.horizontal_wrapped(|ui| {
-            for geometry_type in ManualGeometryType::ALL {
-                selectable_enum(
-                    ui,
-                    &mut self.form.manual.geometry_type,
-                    geometry_type,
-                    geometry_type.label(),
-                );
-            }
-        });
+        let labels = ManualGeometryType::ALL.map(ManualGeometryType::label);
+        let mut selected = ManualGeometryType::ALL
+            .iter()
+            .position(|geometry_type| *geometry_type == self.form.manual.geometry_type)
+            .unwrap_or(0);
+        tabs_with_id(
+            ui,
+            &theme,
+            "manual-geometry-type-tabs",
+            &mut selected,
+            &labels,
+        );
+        self.form.manual.geometry_type = ManualGeometryType::ALL[selected];
 
-        ui.add_space(8.0);
-        Self::inset_panel(ui, |ui| match self.form.manual.geometry_type {
+        ui.add_space(theme.spacing.sm);
+        Self::inset_panel(ui, &theme, |ui| match self.form.manual.geometry_type {
             ManualGeometryType::Polygon => {
-                manual_polygon_ui(ui, &mut self.form.manual.polygon);
+                manual_polygon_ui(ui, &theme, &mut self.form.manual.polygon);
             }
             ManualGeometryType::ParaSymbol => {
                 ui.strong("Para symbol point");
                 coordinate_field_ui_with_ids(
                     ui,
+                    &theme,
                     "Position",
                     &mut self.form.manual.para_symbol.point,
                     para_lat_id(),
@@ -620,52 +867,65 @@ impl DamApp {
                 );
             }
             ManualGeometryType::TextNumber => {
-                manual_text_number_ui(ui, &mut self.form.manual.text_number);
+                manual_text_number_ui(ui, &theme, &mut self.form.manual.text_number);
             }
             ManualGeometryType::PieCircle => {
-                manual_pie_circle_ui(ui, &mut self.form.manual.pie_circle);
+                manual_pie_circle_ui(ui, &theme, &mut self.form.manual.pie_circle);
             }
             ManualGeometryType::Strip => {
-                manual_strip_ui(ui, &mut self.form.manual.strip);
+                manual_strip_ui(ui, &theme, &mut self.form.manual.strip);
             }
         });
 
-        ui.add_space(8.0);
-        ui.strong("Map attributes");
         let geometry_type = self.form.manual.geometry_type;
-        Self::inset_panel(ui, |ui| {
-            ui.label("Map category");
-            ui.horizontal_wrapped(|ui| {
-                for category in ManualMapCategory::ALL {
-                    selectable_enum(
-                        ui,
-                        &mut self.form.manual.attributes.category,
-                        category,
-                        category.label(),
-                    );
+        if geometry_supports_buffer(geometry_type) {
+            ui.add_space(theme.spacing.sm);
+            ui.strong("Map attributes");
+            Self::inset_panel(ui, &theme, |ui| {
+                ui.label("Map category");
+                if !MANUAL_ATTRIBUTE_CATEGORIES.contains(&self.form.manual.attributes.category) {
+                    self.form.manual.attributes.category = ManualMapCategory::Other;
                 }
-            });
-
-            ui.label("Rendering");
-            ui.horizontal(|ui| {
-                for rendering in ManualMapRendering::ALL {
-                    selectable_enum(
-                        ui,
-                        &mut self.form.manual.attributes.rendering,
-                        rendering,
-                        rendering.label(),
-                    );
+                let category_labels = MANUAL_ATTRIBUTE_CATEGORIES.map(ManualMapCategory::label);
+                let category_colors = MANUAL_ATTRIBUTE_CATEGORIES.map(manual_category_color);
+                let mut selected_category = MANUAL_ATTRIBUTE_CATEGORIES
+                    .iter()
+                    .position(|category| *category == self.form.manual.attributes.category)
+                    .unwrap_or(0);
+                if colored_segmented(
+                    ui,
+                    &theme,
+                    &category_labels,
+                    &category_colors,
+                    &mut selected_category,
+                )
+                .changed()
+                {
+                    self.form.manual.attributes.category =
+                        MANUAL_ATTRIBUTE_CATEGORIES[selected_category];
                 }
-            });
 
-            if geometry_supports_buffer(geometry_type) {
+                ui.label("Rendering");
+                let rendering_labels = ManualMapRendering::ALL.map(ManualMapRendering::label);
+                let mut selected_rendering = ManualMapRendering::ALL
+                    .iter()
+                    .position(|rendering| *rendering == self.form.manual.attributes.rendering)
+                    .unwrap_or(0);
+                if segmented(ui, &theme, &rendering_labels, &mut selected_rendering).changed() {
+                    self.form.manual.attributes.rendering =
+                        ManualMapRendering::ALL[selected_rendering];
+                }
+
                 ui.label("Lateral buffer (NM)");
-                ui.add(
+                themed_text_edit(
+                    ui,
+                    &theme,
                     egui::TextEdit::singleline(&mut self.form.manual.attributes.lateral_buffer_nm)
                         .desired_width(96.0),
+                    ControlSize::Md,
                 );
-            }
-        });
+            });
+        }
     }
 
     fn date_section(&mut self, ui: &mut egui::Ui) {
@@ -680,10 +940,16 @@ impl DamApp {
                 for weekday in Weekday::ALL {
                     let possible = self.form.possible_weekdays.contains(&weekday);
                     let mut selected = self.form.active_weekdays.contains(&weekday);
-                    let response = ui.add_enabled(
-                        possible,
-                        egui::Checkbox::new(&mut selected, weekday.to_string()),
-                    );
+                    let response = ui
+                        .add_enabled_ui(possible, |ui| {
+                            frost_checkbox(
+                                ui,
+                                &self.frost_theme,
+                                &mut selected,
+                                weekday.to_string(),
+                            )
+                        })
+                        .inner;
                     if response.changed() {
                         if selected {
                             self.form.active_weekdays.insert(weekday);
@@ -705,22 +971,32 @@ impl DamApp {
             ui.horizontal(|ui| {
                 match field {
                     DateField::Start => {
-                        ui.add(
+                        themed_text_edit(
+                            ui,
+                            &self.frost_theme,
                             egui::TextEdit::singleline(&mut self.form.start_date)
                                 .desired_width(112.0),
+                            ControlSize::Md,
                         );
                     }
                     DateField::End => {
-                        ui.add(
+                        themed_text_edit(
+                            ui,
+                            &self.frost_theme,
                             egui::TextEdit::singleline(&mut self.form.end_date)
                                 .desired_width(112.0),
+                            ControlSize::Md,
                         );
                     }
                 }
 
-                let button = egui::Button::new("Pick").selected(active);
+                let variant = if active {
+                    ControlVariant::Primary
+                } else {
+                    ControlVariant::Secondary
+                };
                 open_picker = ui
-                    .add_sized([46.0, 24.0], button)
+                    .frost_button(&self.frost_theme, "Pick", variant, ControlSize::Sm)
                     .on_hover_text("Open calendar")
                     .clicked();
             });
@@ -755,7 +1031,8 @@ impl DamApp {
     }
 
     fn periods_section(&mut self, ui: &mut egui::Ui) {
-        ui.checkbox(&mut self.form.display_levels, "Display levels");
+        let theme = self.frost_theme.clone();
+        frost_checkbox(ui, &theme, &mut self.form.display_levels, "Display levels");
         ui.label(format!(
             "{} / {MAX_PERIODS} activation period(s)",
             self.form.periods.len()
@@ -765,15 +1042,9 @@ impl DamApp {
         let mut add_after = None;
 
         for index in 0..self.form.periods.len() {
-            ui.group(|ui| {
+            Self::period_panel(ui, &theme, |ui| {
                 ui.horizontal(|ui| {
-                    let selected = self.selected_period == index;
-                    if ui
-                        .selectable_label(selected, format!("Period {}", index + 1))
-                        .clicked()
-                    {
-                        self.selected_period = index;
-                    }
+                    ui.strong(format!("Period {}", index + 1));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let add_enabled = self.form.periods.len() < MAX_PERIODS;
                         if ui
@@ -796,8 +1067,9 @@ impl DamApp {
                     });
                 });
 
-                period_row_ui(ui, index, &mut self.form.periods[index]);
+                period_row_ui(ui, &theme, index, &mut self.form.periods[index]);
             });
+            ui.add_space(theme.spacing.sm);
         }
 
         if let Some(index) = add_after {
@@ -815,75 +1087,78 @@ impl DamApp {
 
     fn corrections_section(&mut self, ui: &mut egui::Ui) {
         ui.label("Altitude correction");
-        ui.horizontal(|ui| {
-            selectable_enum(
-                ui,
-                &mut self.form.altitude_correction,
-                AltitudeCorrection::None,
-                "None",
-            );
-            selectable_enum(
-                ui,
-                &mut self.form.altitude_correction,
-                AltitudeCorrection::QnhCorr,
-                "QNH Corr",
-            );
-            selectable_enum(
-                ui,
-                &mut self.form.altitude_correction,
-                AltitudeCorrection::FlCorr,
-                "FL Corr",
-            );
-        });
+        let altitude_options = [
+            AltitudeCorrection::None,
+            AltitudeCorrection::QnhCorr,
+            AltitudeCorrection::FlCorr,
+        ];
+        let altitude_labels = ["None", "QNH Corr", "FL Corr"];
+        let mut selected_altitude = altitude_options
+            .iter()
+            .position(|option| *option == self.form.altitude_correction)
+            .unwrap_or(0);
+        if segmented(
+            ui,
+            &self.frost_theme,
+            &altitude_labels,
+            &mut selected_altitude,
+        )
+        .changed()
+        {
+            self.form.altitude_correction = altitude_options[selected_altitude];
+        }
 
         ui.label("Upper buffer");
-        ui.horizontal(|ui| {
-            selectable_enum(
-                ui,
-                &mut self.form.upper_buffer,
-                BufferFilter::Default,
-                "Default",
-            );
-            selectable_enum(
-                ui,
-                &mut self.form.upper_buffer,
-                BufferFilter::Half,
-                "UL half",
-            );
-            selectable_enum(
-                ui,
-                &mut self.form.upper_buffer,
-                BufferFilter::NoBuffer,
-                "UL no buffer",
-            );
-        });
+        let buffer_options = [
+            BufferFilter::Default,
+            BufferFilter::Half,
+            BufferFilter::NoBuffer,
+        ];
+        let upper_buffer_labels = ["Default", "UL half", "UL no buffer"];
+        let mut selected_upper_buffer = buffer_options
+            .iter()
+            .position(|option| *option == self.form.upper_buffer)
+            .unwrap_or(0);
+        if segmented(
+            ui,
+            &self.frost_theme,
+            &upper_buffer_labels,
+            &mut selected_upper_buffer,
+        )
+        .changed()
+        {
+            self.form.upper_buffer = buffer_options[selected_upper_buffer];
+        }
 
         ui.label("Lower buffer");
-        ui.horizontal(|ui| {
-            selectable_enum(
-                ui,
-                &mut self.form.lower_buffer,
-                BufferFilter::Default,
-                "Default",
-            );
-            selectable_enum(
-                ui,
-                &mut self.form.lower_buffer,
-                BufferFilter::Half,
-                "LL half",
-            );
-            selectable_enum(
-                ui,
-                &mut self.form.lower_buffer,
-                BufferFilter::NoBuffer,
-                "LL no buffer",
-            );
-        });
+        let lower_buffer_labels = ["Default", "LL half", "LL no buffer"];
+        let mut selected_lower_buffer = buffer_options
+            .iter()
+            .position(|option| *option == self.form.lower_buffer)
+            .unwrap_or(0);
+        if segmented(
+            ui,
+            &self.frost_theme,
+            &lower_buffer_labels,
+            &mut selected_lower_buffer,
+        )
+        .changed()
+        {
+            self.form.lower_buffer = buffer_options[selected_lower_buffer];
+        }
     }
 
     fn distribution_section(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("Unit / Sector").clicked() {
+            if ui
+                .frost_button(
+                    &self.frost_theme,
+                    "Unit / Sector",
+                    ControlVariant::Secondary,
+                    ControlSize::Md,
+                )
+                .clicked()
+            {
                 self.show_distribution = true;
             }
             ui.label(format!(
@@ -894,20 +1169,31 @@ impl DamApp {
     }
 
     fn text_section(&mut self, ui: &mut egui::Ui) {
-        ui.checkbox(&mut self.form.display_text, "Display Text");
+        frost_checkbox(
+            ui,
+            &self.frost_theme,
+            &mut self.form.display_text,
+            "Display Text",
+        );
         ui.label(format!("Text ({} / 250)", self.form.text.chars().count()));
-        ui.add(
+        themed_text_edit(
+            ui,
+            &self.frost_theme,
             egui::TextEdit::multiline(&mut self.form.text)
                 .desired_rows(4)
                 .desired_width(f32::INFINITY),
+            ControlSize::Md,
         );
         ui.label("DABS Info");
         let mut dabs_info = String::new();
-        ui.add_enabled(
+        themed_text_edit_enabled(
+            ui,
+            &self.frost_theme,
             false,
             egui::TextEdit::multiline(&mut dabs_info)
                 .desired_rows(2)
                 .desired_width(f32::INFINITY),
+            ControlSize::Md,
         );
     }
 
@@ -915,8 +1201,11 @@ impl DamApp {
         match &self.submission_status {
             SubmissionStatus::Idle => {}
             SubmissionStatus::Invalid(issues) => {
-                ui.colored_label(egui::Color32::LIGHT_RED, "Blocked by validation errors.");
-                render_validation_issues(ui, issues);
+                ui.colored_label(
+                    self.frost_theme.palette.destructive,
+                    "Blocked by validation errors.",
+                );
+                render_validation_issues(ui, &self.frost_theme, issues);
             }
             SubmissionStatus::Building => {
                 ui.label("Building submission payload...");
@@ -931,7 +1220,7 @@ impl DamApp {
                 ui.label(message);
             }
             SubmissionStatus::Failed { message } => {
-                ui.colored_label(egui::Color32::LIGHT_RED, message);
+                ui.colored_label(self.frost_theme.palette.destructive, message);
             }
         }
     }
@@ -942,7 +1231,7 @@ impl DamApp {
             .show(ui, |ui| {
                 diagnostics(ui, &self.catalog.diagnostics);
                 ui.separator();
-                ui.label("PMTiles: no runtime PMTiles file configured; using dark fallback.");
+                ui.label("Tiles: online CARTO Dark Matter raster tiles.");
                 ui.label(format!("Build: {}", env!("CARGO_PKG_VERSION")));
             });
     }
@@ -977,7 +1266,7 @@ impl DamApp {
                 ui.label("Focus a coordinate or distance field to enable map placement.");
             }
         } else {
-            ui.strong("Switzerland country border");
+            ui.strong("Online dark map");
             ui.label("No DAM map selected.");
         }
 
@@ -1032,7 +1321,7 @@ impl DamApp {
             self.form.display_levels,
         );
         let mut clicked_coordinate = None;
-        walkers::Map::new(None, &mut self.map_memory, center)
+        walkers::Map::new(Some(&mut self.map_tiles), &mut self.map_memory, center)
             .zoom_with_ctrl(false)
             .double_click_to_zoom(true)
             .with_plugin(overlay)
@@ -1094,13 +1383,20 @@ impl DamApp {
         let mut open = true;
         let mut picked = None;
         let selected_date = self.form_date(field);
+        let theme = self.frost_theme.clone();
         egui::Window::new(format!("Select {}", field.label()))
             .id(egui::Id::new(("date_picker", field.id())))
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                date_picker_contents(ui, &mut self.date_picker_month, selected_date, &mut picked);
+                date_picker_contents(
+                    ui,
+                    &theme,
+                    &mut self.date_picker_month,
+                    selected_date,
+                    &mut picked,
+                );
             });
 
         if let Some(date) = picked {
@@ -1117,39 +1413,46 @@ impl DamApp {
         }
 
         let mut open = self.show_distribution;
-        egui::Window::new("Unit / Sector")
-            .open(&mut open)
-            .resizable(true)
-            .default_size([620.0, 520.0])
-            .show(ctx, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    for region in ["Geneva", "Zurich"] {
-                        ui.heading(region);
-                        for group in unit_groups().iter().filter(|group| group.region == region) {
-                            ui.group(|ui| {
-                                let mut unit_selected = group.sectors.iter().all(|sector| {
-                                    self.form.distribution.sectors.contains(sector.id)
-                                });
-                                let unit_response = ui.checkbox(&mut unit_selected, group.label);
-                                if unit_response.changed() {
-                                    for sector in group.sectors {
-                                        if unit_selected {
-                                            self.form
-                                                .distribution
-                                                .sectors
-                                                .insert(sector.id.to_owned());
-                                        } else {
-                                            self.form.distribution.sectors.remove(sector.id);
-                                        }
-                                    }
-                                }
+        let content_rect = ctx.content_rect();
+        let preferred_card_width: f32 = 456.0;
+        let max_card_size = egui::vec2(
+            (content_rect.width() - 32.0).max(320.0),
+            (content_rect.height() - 32.0).max(280.0),
+        );
+        self.distribution_card.size = egui::vec2(
+            preferred_card_width.min(max_card_size.x),
+            self.distribution_card.size.y.min(max_card_size.y),
+        );
 
-                                ui.horizontal_wrapped(|ui| {
-                                    for sector in group.sectors {
-                                        let mut selected =
-                                            self.form.distribution.sectors.contains(sector.id);
-                                        if ui.checkbox(&mut selected, sector.label).changed() {
-                                            if selected {
+        egui::Area::new(egui::Id::new("distribution_card_area"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(content_rect.min)
+            .show(ctx, |ui| {
+                ui.set_min_size(content_rect.size());
+                let response = drag_card(
+                    ui,
+                    &self.frost_theme,
+                    egui::Id::new("distribution_card"),
+                    &mut self.distribution_card,
+                    "Unit / Sector",
+                    |ui| {
+                        for region in ["Geneva", "Zurich"] {
+                            ui.heading(region);
+                            for group in unit_groups().iter().filter(|group| group.region == region)
+                            {
+                                Self::inset_panel(ui, &self.frost_theme, |ui| {
+                                    let mut unit_selected = group.sectors.iter().all(|sector| {
+                                        self.form.distribution.sectors.contains(sector.id)
+                                    });
+                                    let unit_response = frost_checkbox(
+                                        ui,
+                                        &self.frost_theme,
+                                        &mut unit_selected,
+                                        group.label,
+                                    );
+                                    if unit_response.changed() {
+                                        for sector in group.sectors {
+                                            if unit_selected {
                                                 self.form
                                                     .distribution
                                                     .sectors
@@ -1159,11 +1462,41 @@ impl DamApp {
                                             }
                                         }
                                     }
+
+                                    ui.horizontal_wrapped(|ui| {
+                                        for sector in group.sectors {
+                                            let mut selected =
+                                                self.form.distribution.sectors.contains(sector.id);
+                                            if frost_checkbox(
+                                                ui,
+                                                &self.frost_theme,
+                                                &mut selected,
+                                                sector.label,
+                                            )
+                                            .changed()
+                                            {
+                                                if selected {
+                                                    self.form
+                                                        .distribution
+                                                        .sectors
+                                                        .insert(sector.id.to_owned());
+                                                } else {
+                                                    self.form
+                                                        .distribution
+                                                        .sectors
+                                                        .remove(sector.id);
+                                                }
+                                            }
+                                        }
+                                    });
                                 });
-                            });
+                            }
                         }
-                    }
-                });
+                    },
+                );
+                if response.closed {
+                    open = false;
+                }
             });
         self.show_distribution = open;
     }
@@ -1183,10 +1516,26 @@ impl DamApp {
             .show(ctx, |ui| {
                 ui.label("Reset all current creation inputs?");
                 ui.horizontal(|ui| {
-                    if ui.button("Reset").clicked() {
+                    if ui
+                        .frost_button(
+                            &self.frost_theme,
+                            "Reset",
+                            ControlVariant::Destructive,
+                            ControlSize::Md,
+                        )
+                        .clicked()
+                    {
                         reset = true;
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui
+                        .frost_button(
+                            &self.frost_theme,
+                            "Cancel",
+                            ControlVariant::Outline,
+                            ControlSize::Md,
+                        )
+                        .clicked()
+                    {
                         cancel = true;
                     }
                 });
@@ -1286,12 +1635,12 @@ impl DamApp {
     }
 }
 
-fn render_validation_issues(ui: &mut egui::Ui, issues: &[ValidationIssue]) {
+fn render_validation_issues(ui: &mut egui::Ui, theme: &Theme, issues: &[ValidationIssue]) {
     if issues.is_empty() {
         return;
     }
 
-    ui.colored_label(egui::Color32::LIGHT_RED, "Validation issues");
+    ui.colored_label(theme.palette.destructive, "Validation issues");
     for issue in issues {
         ui.label(format!("{}: {}", issue.field, issue.message));
     }
@@ -1306,10 +1655,10 @@ fn status_from_export_error(error: dam_core::ExportError) -> SubmissionStatus {
     }
 }
 
-fn period_row_ui(ui: &mut egui::Ui, index: usize, row: &mut PeriodRowState) {
+fn period_row_ui(ui: &mut egui::Ui, theme: &Theme, index: usize, row: &mut PeriodRowState) {
     ui.horizontal_wrapped(|ui| {
-        ui.checkbox(&mut row.start_indication, "Start indication");
-        ui.checkbox(&mut row.end_indication, "End indication");
+        frost_checkbox(ui, theme, &mut row.start_indication, "Start indication");
+        frost_checkbox(ui, theme, &mut row.end_indication, "End indication");
     });
 
     ui.horizontal(|ui| {
@@ -1317,10 +1666,13 @@ fn period_row_ui(ui: &mut egui::Ui, index: usize, row: &mut PeriodRowState) {
         let end_id = ui.make_persistent_id(format!("period-{index}-end"));
         ui.vertical(|ui| {
             ui.label("Start time");
-            let response = ui.add(
+            let response = themed_text_edit(
+                ui,
+                theme,
                 egui::TextEdit::singleline(&mut row.start_time)
                     .id(start_id)
                     .desired_width(72.0),
+                ControlSize::Md,
             );
             if response.has_focus() && ui.input(|input| input.key_pressed(egui::Key::N)) {
                 row.start_time = current_time_text();
@@ -1329,10 +1681,13 @@ fn period_row_ui(ui: &mut egui::Ui, index: usize, row: &mut PeriodRowState) {
         });
         ui.vertical(|ui| {
             ui.label("End time");
-            let response = ui.add(
+            let response = themed_text_edit(
+                ui,
+                theme,
                 egui::TextEdit::singleline(&mut row.end_time)
                     .id(end_id)
                     .desired_width(72.0),
+                ControlSize::Md,
             );
             if response.has_focus() && ui.input(|input| input.key_pressed(egui::Key::E)) {
                 row.end_time = "23:59".to_owned();
@@ -1341,31 +1696,32 @@ fn period_row_ui(ui: &mut egui::Ui, index: usize, row: &mut PeriodRowState) {
     });
 
     ui.horizontal(|ui| {
-        level_field_ui(ui, "Low level", &mut row.lower);
-        level_field_ui(ui, "High level", &mut row.upper);
+        level_field_ui(ui, theme, "Low level", &mut row.lower);
+        level_field_ui(ui, theme, "High level", &mut row.upper);
     });
 }
 
-fn level_field_ui(ui: &mut egui::Ui, label: &str, level: &mut LevelFieldState) {
+fn level_field_ui(ui: &mut egui::Ui, theme: &Theme, label: &str, level: &mut LevelFieldState) {
     ui.vertical(|ui| {
         ui.label(label);
         ui.horizontal(|ui| {
-            ui.add(egui::TextEdit::singleline(&mut level.value).desired_width(78.0));
+            themed_text_edit(
+                ui,
+                theme,
+                egui::TextEdit::singleline(&mut level.value).desired_width(78.0),
+                ControlSize::Md,
+            );
             let locked = level.is_forced_feet();
-            let mut effective = level.effective_unit();
+            let effective = level.effective_unit();
             ui.add_enabled_ui(!locked, |ui| {
-                if ui
-                    .selectable_label(effective == dam_core::LevelUnit::FlightLevel, "FL")
-                    .clicked()
-                {
-                    level.explicit_unit = dam_core::LevelUnit::FlightLevel;
-                    effective = dam_core::LevelUnit::FlightLevel;
-                }
-                if ui
-                    .selectable_label(effective == dam_core::LevelUnit::Feet, "ft")
-                    .clicked()
-                {
-                    level.explicit_unit = dam_core::LevelUnit::Feet;
+                let units = [dam_core::LevelUnit::FlightLevel, dam_core::LevelUnit::Feet];
+                let labels = units.map(dam_core::LevelUnit::label);
+                let mut selected = units
+                    .iter()
+                    .position(|unit| *unit == effective)
+                    .unwrap_or(0);
+                if segmented(ui, theme, &labels, &mut selected).changed() {
+                    level.explicit_unit = units[selected];
                 }
             });
             if locked {
@@ -1375,7 +1731,7 @@ fn level_field_ui(ui: &mut egui::Ui, label: &str, level: &mut LevelFieldState) {
     });
 }
 
-fn manual_polygon_ui(ui: &mut egui::Ui, polygon: &mut PolygonDraftState) {
+fn manual_polygon_ui(ui: &mut egui::Ui, theme: &Theme, polygon: &mut PolygonDraftState) {
     ui.horizontal(|ui| {
         ui.strong(format!(
             "Point list ({} / {MAX_POLYGON_POINTS})",
@@ -1455,6 +1811,7 @@ fn manual_polygon_ui(ui: &mut egui::Ui, polygon: &mut PolygonDraftState) {
             PolygonNodeDraft::Point(field) => {
                 coordinate_field_ui_with_ids(
                     ui,
+                    theme,
                     "",
                     field,
                     polygon_point_lat_id(index),
@@ -1464,6 +1821,7 @@ fn manual_polygon_ui(ui: &mut egui::Ui, polygon: &mut PolygonDraftState) {
             PolygonNodeDraft::Arc(arc) => {
                 coordinate_field_ui_with_ids(
                     ui,
+                    theme,
                     "Center",
                     &mut arc.center,
                     polygon_arc_center_lat_id(index),
@@ -1472,6 +1830,7 @@ fn manual_polygon_ui(ui: &mut egui::Ui, polygon: &mut PolygonDraftState) {
                 ui.label("Radius (NM)");
                 numeric_field_ui_with_id(
                     ui,
+                    theme,
                     &mut arc.radius_nm,
                     polygon_arc_radius_id(index),
                     96.0,
@@ -1501,6 +1860,7 @@ fn manual_polygon_ui(ui: &mut egui::Ui, polygon: &mut PolygonDraftState) {
     ui.label("Label position (optional)");
     coordinate_field_ui_with_ids(
         ui,
+        theme,
         "",
         &mut polygon.label,
         polygon_label_lat_id(),
@@ -1508,19 +1868,23 @@ fn manual_polygon_ui(ui: &mut egui::Ui, polygon: &mut PolygonDraftState) {
     );
 }
 
-fn manual_text_number_ui(ui: &mut egui::Ui, text_number: &mut TextNumberDraftState) {
+fn manual_text_number_ui(ui: &mut egui::Ui, theme: &Theme, text_number: &mut TextNumberDraftState) {
     ui.strong("Text and number point");
     coordinate_field_ui_with_ids(
         ui,
+        theme,
         "Position",
         &mut text_number.point,
         text_number_lat_id(),
         text_number_lon_id(),
     );
-    ui.add(
+    themed_text_edit(
+        ui,
+        theme,
         egui::TextEdit::singleline(&mut text_number.text)
             .id(text_number_text_id())
             .desired_width(f32::INFINITY),
+        ControlSize::Md,
     );
 
     ui.label("Color");
@@ -1538,10 +1902,11 @@ fn manual_text_number_ui(ui: &mut egui::Ui, text_number: &mut TextNumberDraftSta
     });
 }
 
-fn manual_pie_circle_ui(ui: &mut egui::Ui, pie: &mut PieCircleDraftState) {
+fn manual_pie_circle_ui(ui: &mut egui::Ui, theme: &Theme, pie: &mut PieCircleDraftState) {
     ui.strong("Pie / circle");
     coordinate_field_ui_with_ids(
         ui,
+        theme,
         "Center",
         &mut pie.center,
         pie_center_lat_id(),
@@ -1550,15 +1915,25 @@ fn manual_pie_circle_ui(ui: &mut egui::Ui, pie: &mut PieCircleDraftState) {
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.label("Radius (NM)");
-            numeric_field_ui_with_id(ui, &mut pie.radius_nm, pie_radius_id(), 96.0);
+            numeric_field_ui_with_id(ui, theme, &mut pie.radius_nm, pie_radius_id(), 96.0);
         });
         ui.vertical(|ui| {
             ui.label("First angle");
-            ui.add(egui::TextEdit::singleline(&mut pie.first_angle_deg).desired_width(78.0));
+            themed_text_edit(
+                ui,
+                theme,
+                egui::TextEdit::singleline(&mut pie.first_angle_deg).desired_width(78.0),
+                ControlSize::Md,
+            );
         });
         ui.vertical(|ui| {
             ui.label("Last angle");
-            ui.add(egui::TextEdit::singleline(&mut pie.last_angle_deg).desired_width(78.0));
+            themed_text_edit(
+                ui,
+                theme,
+                egui::TextEdit::singleline(&mut pie.last_angle_deg).desired_width(78.0),
+                ControlSize::Md,
+            );
         });
     });
 
@@ -1566,6 +1941,7 @@ fn manual_pie_circle_ui(ui: &mut egui::Ui, pie: &mut PieCircleDraftState) {
     ui.label("Label position (optional)");
     coordinate_field_ui_with_ids(
         ui,
+        theme,
         "",
         &mut pie.label,
         pie_label_lat_id(),
@@ -1573,10 +1949,11 @@ fn manual_pie_circle_ui(ui: &mut egui::Ui, pie: &mut PieCircleDraftState) {
     );
 }
 
-fn manual_strip_ui(ui: &mut egui::Ui, strip: &mut StripDraftState) {
+fn manual_strip_ui(ui: &mut egui::Ui, theme: &Theme, strip: &mut StripDraftState) {
     ui.strong("Strip corridor");
     coordinate_field_ui_with_ids(
         ui,
+        theme,
         "Point 1",
         &mut strip.point1,
         strip_point1_lat_id(),
@@ -1584,18 +1961,20 @@ fn manual_strip_ui(ui: &mut egui::Ui, strip: &mut StripDraftState) {
     );
     coordinate_field_ui_with_ids(
         ui,
+        theme,
         "Point 2",
         &mut strip.point2,
         strip_point2_lat_id(),
         strip_point2_lon_id(),
     );
     ui.label("Width (NM)");
-    numeric_field_ui_with_id(ui, &mut strip.width_nm, strip_width_id(), 96.0);
+    numeric_field_ui_with_id(ui, theme, &mut strip.width_nm, strip_width_id(), 96.0);
 
     ui.separator();
     ui.label("Label position (optional)");
     coordinate_field_ui_with_ids(
         ui,
+        theme,
         "",
         &mut strip.label,
         strip_label_lat_id(),
@@ -1607,6 +1986,7 @@ const FOCUS_HIGHLIGHT: egui::Color32 = egui::Color32::from_rgb(255, 200, 80);
 
 fn coordinate_field_ui_with_ids(
     ui: &mut egui::Ui,
+    theme: &Theme,
     label: &str,
     coordinate: &mut CoordinateFieldState,
     lat_id: egui::Id,
@@ -1621,10 +2001,13 @@ fn coordinate_field_ui_with_ids(
             let mut combined: Option<egui::Rect> = None;
             ui.vertical(|ui| {
                 ui.label("Latitude");
-                let r = ui.add(
+                let r = themed_text_edit(
+                    ui,
+                    theme,
                     egui::TextEdit::singleline(&mut coordinate.lat)
                         .id(lat_id)
                         .desired_width(104.0),
+                    ControlSize::Md,
                 );
                 if r.has_focus() {
                     focused = true;
@@ -1633,10 +2016,13 @@ fn coordinate_field_ui_with_ids(
             });
             ui.vertical(|ui| {
                 ui.label("Longitude");
-                let r = ui.add(
+                let r = themed_text_edit(
+                    ui,
+                    theme,
                     egui::TextEdit::singleline(&mut coordinate.lon)
                         .id(lon_id)
                         .desired_width(104.0),
+                    ControlSize::Md,
                 );
                 if r.has_focus() {
                     focused = true;
@@ -1659,11 +2045,20 @@ fn coordinate_field_ui_with_ids(
     }
 }
 
-fn numeric_field_ui_with_id(ui: &mut egui::Ui, value: &mut String, id: egui::Id, width: f32) {
-    let response = ui.add(
+fn numeric_field_ui_with_id(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    value: &mut String,
+    id: egui::Id,
+    width: f32,
+) {
+    let response = themed_text_edit(
+        ui,
+        theme,
         egui::TextEdit::singleline(value)
             .id(id)
             .desired_width(width),
+        ControlSize::Md,
     );
     if response.has_focus() {
         ui.painter().rect_stroke(
@@ -1683,6 +2078,7 @@ fn selectable_enum<T: Copy + PartialEq>(ui: &mut egui::Ui, value: &mut T, option
 
 fn date_picker_contents(
     ui: &mut egui::Ui,
+    theme: &Theme,
     visible_month: &mut NaiveDate,
     selected_date: Option<NaiveDate>,
     picked: &mut Option<NaiveDate>,
@@ -1730,9 +2126,9 @@ fn date_picker_contents(
                 };
                 let mut button = egui::Button::new(text).min_size(day_size);
                 if selected_date == Some(date) {
-                    button = button.fill(egui::Color32::from_rgb(35, 94, 98));
+                    button = button.fill(mix(theme.palette.card, theme.palette.ring, 0.32));
                 } else if date == today {
-                    button = button.stroke(egui::Stroke::new(1.0, ACCENT));
+                    button = button.stroke(egui::Stroke::new(1.0, theme.palette.ring));
                 }
 
                 if ui.add(button).clicked() {
@@ -1748,7 +2144,10 @@ fn date_picker_contents(
 
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        if ui.button("Today").clicked() {
+        if ui
+            .frost_button(theme, "Today", ControlVariant::Secondary, ControlSize::Sm)
+            .clicked()
+        {
             let today = current_date();
             *visible_month = first_day_of_month(today);
             *picked = Some(today);
@@ -1789,17 +2188,17 @@ fn parse_date_text(value: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()
 }
 
-fn section_heading(ui: &mut egui::Ui, title: &str) {
+fn section_heading(ui: &mut egui::Ui, theme: &Theme, title: &str) {
     ui.horizontal(|ui| {
         let rect = ui
             .allocate_exact_size(egui::vec2(3.0, 18.0), egui::Sense::hover())
             .0;
-        ui.painter().rect_filled(rect, 1.5, ACCENT);
-        ui.heading(title);
+        ui.painter().rect_filled(rect, 1.5, theme.palette.ring);
+        ui.heading(egui::RichText::new(title).color(theme.palette.foreground));
     });
-    ui.add_space(4.0);
+    ui.add_space(theme.spacing.xs);
     ui.separator();
-    ui.add_space(8.0);
+    ui.add_space(theme.spacing.sm);
 }
 
 fn diagnostics(ui: &mut egui::Ui, diagnostics: &[CatalogDiagnostic]) {
