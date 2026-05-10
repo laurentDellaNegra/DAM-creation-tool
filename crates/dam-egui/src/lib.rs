@@ -13,7 +13,10 @@ use crate::form::{
 use crate::frost_night::components::{checkbox as frost_checkbox, segmented};
 use crate::frost_night::composites::{ToolbarAction, top_toolbar_with_id};
 use crate::frost_night::containers::{DragCardState, drag_card, tabs_with_id};
-use crate::frost_night::icons::{ICON_BOOK_OPEN, ICON_CIRCLE_X, ICON_GLOBE, ICON_PLANE};
+use crate::frost_night::icons::{
+    ICON_BOOK_OPEN, ICON_CIRCLE_X, ICON_CROSSHAIR, ICON_GLOBE, ICON_PLANE, ICON_RAINBOW,
+    ICON_TRASH, icon_text,
+};
 use crate::frost_night::theme::mix;
 use crate::frost_night::{
     ControlSize, ControlVariant, FrostUiExt, InstallThemeOptions, Theme, install_theme,
@@ -62,6 +65,11 @@ const MANUAL_ATTRIBUTE_CATEGORIES: [ManualMapCategory; 6] = [
 enum DateField {
     Start,
     End,
+}
+
+enum DatePickerAction {
+    Pick(NaiveDate),
+    Close,
 }
 
 impl DateField {
@@ -148,7 +156,6 @@ impl eframe::App for DamApp {
         self.toolbar(ui.ctx());
         self.distribution_window(ui.ctx());
         self.reset_confirmation(ui.ctx());
-        self.date_picker_window(ui.ctx());
     }
 }
 
@@ -935,12 +942,11 @@ impl DamApp {
                 }
 
                 ui.label("Lateral buffer (NM)");
-                themed_text_edit(
+                integer_drag_value_ui(
                     ui,
                     &theme,
-                    egui::TextEdit::singleline(&mut self.form.manual.attributes.lateral_buffer_nm)
-                        .desired_width(96.0),
-                    ControlSize::Md,
+                    &mut self.form.manual.attributes.lateral_buffer_nm,
+                    0..=999,
                 );
             });
         }
@@ -981,54 +987,51 @@ impl DamApp {
     }
 
     fn date_field_ui(&mut self, ui: &mut egui::Ui, field: DateField) {
-        let active = self.active_date_picker == Some(field);
-        let mut open_picker = false;
-
+        let theme = self.frost_theme.clone();
         ui.vertical(|ui| {
             ui.label(field.label());
-            ui.horizontal(|ui| {
-                match field {
-                    DateField::Start => {
-                        themed_text_edit(
-                            ui,
-                            &self.frost_theme,
-                            egui::TextEdit::singleline(&mut self.form.start_date)
-                                .desired_width(112.0),
-                            ControlSize::Md,
-                        );
+            let value = match field {
+                DateField::Start => self.form.start_date.as_str(),
+                DateField::End => self.form.end_date.as_str(),
+            };
+            let active = self.active_date_picker == Some(field);
+            let variant = if active {
+                ControlVariant::Primary
+            } else {
+                ControlVariant::Secondary
+            };
+            let response = ui
+                .frost_button(&theme, value, variant, ControlSize::Md)
+                .on_hover_text("Open calendar");
+
+            if response.clicked() {
+                let date = self.form_date(field).unwrap_or_else(current_date);
+                self.date_picker_month = first_day_of_month(date);
+                self.active_date_picker = Some(field);
+            }
+
+            if self.active_date_picker == Some(field) {
+                let selected_date = self.form_date(field);
+                match date_picker_popup(
+                    ui,
+                    field,
+                    response.rect,
+                    response.clicked(),
+                    &theme,
+                    &mut self.date_picker_month,
+                    selected_date,
+                ) {
+                    Some(DatePickerAction::Pick(date)) => {
+                        self.set_form_date(field, date);
+                        self.active_date_picker = None;
                     }
-                    DateField::End => {
-                        themed_text_edit(
-                            ui,
-                            &self.frost_theme,
-                            egui::TextEdit::singleline(&mut self.form.end_date)
-                                .desired_width(112.0),
-                            ControlSize::Md,
-                        );
+                    Some(DatePickerAction::Close) => {
+                        self.active_date_picker = None;
                     }
+                    None => {}
                 }
-
-                let variant = if active {
-                    ControlVariant::Primary
-                } else {
-                    ControlVariant::Secondary
-                };
-                open_picker = ui
-                    .frost_button(&self.frost_theme, "Pick", variant, ControlSize::Sm)
-                    .on_hover_text("Open calendar")
-                    .clicked();
-            });
+            }
         });
-
-        if open_picker {
-            self.open_date_picker(field);
-        }
-    }
-
-    fn open_date_picker(&mut self, field: DateField) {
-        let date = self.form_date(field).unwrap_or_else(current_date);
-        self.date_picker_month = first_day_of_month(date);
-        self.active_date_picker = Some(field);
     }
 
     fn form_date(&self, field: DateField) -> Option<NaiveDate> {
@@ -1057,32 +1060,27 @@ impl DamApp {
         ));
 
         let mut remove_index = None;
-        let mut add_after = None;
 
         for index in 0..self.form.periods.len() {
             Self::period_panel(ui, &theme, |ui| {
                 ui.horizontal(|ui| {
                     ui.strong(format!("Period {}", index + 1));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let add_enabled = self.form.periods.len() < MAX_PERIODS;
-                        if ui
-                            .add_enabled(
-                                add_enabled,
-                                egui::Button::new("+").min_size([28.0, 28.0].into()),
+                    if index > 0 {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if themed_icon_button(
+                                ui,
+                                &theme,
+                                ICON_TRASH,
+                                "Remove period",
+                                true,
+                                ControlVariant::Outline,
                             )
                             .clicked()
-                        {
-                            add_after = Some(index);
-                        }
-                        let mut remove_clicked = false;
-                        ui.add_enabled_ui(self.form.periods.len() > 1, |ui| {
-                            remove_clicked =
-                                ui.add_sized([28.0, 28.0], egui::Button::new("-")).clicked();
+                            {
+                                remove_index = Some(index);
+                            }
                         });
-                        if remove_clicked {
-                            remove_index = Some(index);
-                        }
-                    });
+                    }
                 });
 
                 period_row_ui(ui, &theme, index, &mut self.form.periods[index]);
@@ -1090,16 +1088,25 @@ impl DamApp {
             ui.add_space(theme.spacing.sm);
         }
 
-        if let Some(index) = add_after {
-            self.form
-                .periods
-                .insert(index + 1, PeriodRowState::default());
-            self.selected_period = index + 1;
-        }
-
         if let Some(index) = remove_index {
             self.form.periods.remove(index);
             self.selected_period = self.selected_period.min(self.form.periods.len() - 1);
+        }
+
+        if ui
+            .add_enabled_ui(self.form.periods.len() < MAX_PERIODS, |ui| {
+                ui.frost_button(
+                    &theme,
+                    "Add period",
+                    ControlVariant::Secondary,
+                    ControlSize::Md,
+                )
+            })
+            .inner
+            .clicked()
+        {
+            self.form.periods.push(PeriodRowState::default());
+            self.selected_period = self.form.periods.len() - 1;
         }
     }
 
@@ -1369,38 +1376,6 @@ impl DamApp {
                 )
             })
             .unwrap_or_else(|| "000/999".to_owned())
-    }
-
-    fn date_picker_window(&mut self, ctx: &egui::Context) {
-        let Some(field) = self.active_date_picker else {
-            return;
-        };
-
-        let mut open = true;
-        let mut picked = None;
-        let selected_date = self.form_date(field);
-        let theme = self.frost_theme.clone();
-        egui::Window::new(format!("Select {}", field.label()))
-            .id(egui::Id::new(("date_picker", field.id())))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
-                date_picker_contents(
-                    ui,
-                    &theme,
-                    &mut self.date_picker_month,
-                    selected_date,
-                    &mut picked,
-                );
-            });
-
-        if let Some(date) = picked {
-            self.set_form_date(field, date);
-            self.active_date_picker = None;
-        } else if !open {
-            self.active_date_picker = None;
-        }
     }
 
     fn distribution_window(&mut self, ctx: &egui::Context) {
@@ -1727,41 +1702,31 @@ fn level_field_ui(ui: &mut egui::Ui, theme: &Theme, label: &str, level: &mut Lev
     });
 }
 
+fn themed_icon_button(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    icon: char,
+    tooltip: &str,
+    enabled: bool,
+    variant: ControlVariant,
+) -> egui::Response {
+    ui.add_enabled_ui(enabled, |ui| {
+        ui.frost_button(theme, icon_text(icon, 15.0), variant, ControlSize::Sm)
+    })
+    .inner
+    .on_hover_text(tooltip)
+}
+
 fn manual_polygon_ui(ui: &mut egui::Ui, theme: &Theme, polygon: &mut PolygonDraftState) {
-    ui.horizontal(|ui| {
-        ui.strong(format!(
-            "Point list ({} / {MAX_POLYGON_POINTS})",
-            polygon.nodes.len()
-        ));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let add_enabled = polygon.nodes.len() < MAX_POLYGON_POINTS;
-            if ui
-                .add_enabled(add_enabled, egui::Button::new("Add Arc"))
-                .clicked()
-            {
-                polygon
-                    .nodes
-                    .push(PolygonNodeDraft::Arc(ArcDraftState::default()));
-                let new_index = polygon.nodes.len() - 1;
-                ui.memory_mut(|m| m.request_focus(polygon_arc_center_lat_id(new_index)));
-            }
-            if ui
-                .add_enabled(add_enabled, egui::Button::new("Add Point"))
-                .clicked()
-            {
-                polygon
-                    .nodes
-                    .push(PolygonNodeDraft::Point(CoordinateFieldState::default()));
-                let new_index = polygon.nodes.len() - 1;
-                ui.memory_mut(|m| m.request_focus(polygon_point_lat_id(new_index)));
-            }
-        });
-    });
+    ui.strong(format!(
+        "Point list ({} / {MAX_POLYGON_POINTS})",
+        polygon.nodes.len()
+    ));
 
     if polygon.nodes.is_empty() {
         ui.colored_label(
             egui::Color32::LIGHT_YELLOW,
-            "Use \"Add Point\" or \"Add Arc\", then click the map to place.",
+            "Add a point or arc, then click the map to place.",
         );
     }
 
@@ -1785,19 +1750,40 @@ fn manual_polygon_ui(ui: &mut egui::Ui, theme: &Theme, polygon: &mut PolygonDraf
         ui.horizontal(|ui| {
             ui.strong(row_label);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Remove").clicked() {
+                if themed_icon_button(
+                    ui,
+                    theme,
+                    ICON_TRASH,
+                    "Remove",
+                    true,
+                    ControlVariant::Outline,
+                )
+                .clicked()
+                {
                     remove_index = Some(index);
                 }
                 let insert_enabled = polygon.nodes.len() < MAX_POLYGON_POINTS;
-                if ui
-                    .add_enabled(insert_enabled, egui::Button::new("Insert Arc"))
-                    .clicked()
+                if themed_icon_button(
+                    ui,
+                    theme,
+                    ICON_RAINBOW,
+                    "Insert arc after",
+                    insert_enabled,
+                    ControlVariant::Outline,
+                )
+                .clicked()
                 {
                     insert_arc_after = Some(index);
                 }
-                if ui
-                    .add_enabled(insert_enabled, egui::Button::new("Insert Point"))
-                    .clicked()
+                if themed_icon_button(
+                    ui,
+                    theme,
+                    ICON_CROSSHAIR,
+                    "Insert point after",
+                    insert_enabled,
+                    ControlVariant::Outline,
+                )
+                .clicked()
                 {
                     insert_point_after = Some(index);
                 }
@@ -1853,7 +1839,43 @@ fn manual_polygon_ui(ui: &mut egui::Ui, theme: &Theme, polygon: &mut PolygonDraf
     }
 
     ui.separator();
-    ui.label("Label position (optional)");
+    ui.horizontal(|ui| {
+        let add_enabled = polygon.nodes.len() < MAX_POLYGON_POINTS;
+        if ui
+            .add_enabled_ui(add_enabled, |ui| {
+                ui.frost_button(
+                    theme,
+                    "Add Point",
+                    ControlVariant::Secondary,
+                    ControlSize::Md,
+                )
+            })
+            .inner
+            .clicked()
+        {
+            polygon
+                .nodes
+                .push(PolygonNodeDraft::Point(CoordinateFieldState::default()));
+            let new_index = polygon.nodes.len() - 1;
+            ui.memory_mut(|m| m.request_focus(polygon_point_lat_id(new_index)));
+        }
+        if ui
+            .add_enabled_ui(add_enabled, |ui| {
+                ui.frost_button(theme, "Add Arc", ControlVariant::Secondary, ControlSize::Md)
+            })
+            .inner
+            .clicked()
+        {
+            polygon
+                .nodes
+                .push(PolygonNodeDraft::Arc(ArcDraftState::default()));
+            let new_index = polygon.nodes.len() - 1;
+            ui.memory_mut(|m| m.request_focus(polygon_arc_center_lat_id(new_index)));
+        }
+    });
+
+    ui.separator();
+    ui.label("Label position");
     coordinate_field_ui_with_ids(
         ui,
         theme,
@@ -1944,7 +1966,7 @@ fn manual_pie_circle_ui(ui: &mut egui::Ui, theme: &Theme, pie: &mut PieCircleDra
     });
 
     ui.separator();
-    ui.label("Label position (optional)");
+    ui.label("Label position");
     coordinate_field_ui_with_ids(
         ui,
         theme,
@@ -1977,7 +1999,7 @@ fn manual_strip_ui(ui: &mut egui::Ui, theme: &Theme, strip: &mut StripDraftState
     numeric_field_ui_with_id(ui, theme, &mut strip.width_nm, strip_width_id(), 96.0);
 
     ui.separator();
-    ui.label("Label position (optional)");
+    ui.label("Label position");
     coordinate_field_ui_with_ids(
         ui,
         theme,
@@ -2076,13 +2098,124 @@ fn numeric_field_ui_with_id(
     }
 }
 
+fn integer_drag_value_ui(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    value: &mut String,
+    range: std::ops::RangeInclusive<i64>,
+) {
+    let min = *range.start();
+    let max = *range.end();
+    let mut integer = parse_integer_value(value).clamp(min, max);
+    let normalized = integer.to_string();
+    if value.trim() != normalized {
+        *value = normalized;
+    }
+
+    let visuals = theme.input(ControlSize::Md);
+    let response = ui
+        .scope(|ui| {
+            let style = ui.style_mut();
+            style.visuals.extreme_bg_color = visuals.bg;
+            style.visuals.widgets.inactive.bg_stroke = visuals.border;
+            style.visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, theme.palette.ring);
+            style.visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, theme.palette.ring);
+
+            ui.add_sized(
+                [112.0, 30.0],
+                egui::DragValue::new(&mut integer)
+                    .range(range)
+                    .speed(1.0)
+                    .suffix(" NM"),
+            )
+        })
+        .inner;
+
+    if response.changed() {
+        *value = integer.to_string();
+    }
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            response.rect.expand(3.0),
+            4.0,
+            egui::Stroke::new(2.0, FOCUS_HIGHLIGHT),
+            egui::StrokeKind::Outside,
+        );
+    }
+}
+
+fn parse_integer_value(value: &str) -> i64 {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return 0;
+    }
+    trimmed
+        .parse::<i64>()
+        .or_else(|_| trimmed.parse::<f64>().map(|value| value.round() as i64))
+        .unwrap_or(0)
+}
+
+fn date_picker_popup(
+    ui: &mut egui::Ui,
+    field: DateField,
+    button_rect: egui::Rect,
+    button_clicked: bool,
+    theme: &Theme,
+    visible_month: &mut NaiveDate,
+    selected_date: Option<NaiveDate>,
+) -> Option<DatePickerAction> {
+    let width = 292.0;
+    let estimated_height = 276.0;
+    let margin = 8.0;
+    let screen_rect = ui.ctx().content_rect();
+    let mut pos = button_rect.left_bottom() + egui::vec2(0.0, 4.0);
+    if pos.x + width > screen_rect.right() - margin {
+        pos.x = button_rect.right() - width;
+    }
+    if pos.y + estimated_height > screen_rect.bottom() - margin {
+        pos.y = button_rect.top() - estimated_height - 4.0;
+    }
+    let min_x = screen_rect.left() + margin;
+    let max_x = (screen_rect.right() - width - margin).max(min_x);
+    pos.x = pos.x.clamp(min_x, max_x);
+    pos.y = pos.y.max(screen_rect.top() + margin);
+
+    let mut picked = None;
+    let area_response = egui::Area::new(egui::Id::new(("date_picker_popup", field.id())))
+        .kind(egui::UiKind::Picker)
+        .order(egui::Order::Foreground)
+        .fixed_pos(pos)
+        .show(ui.ctx(), |ui| {
+            egui::Frame::popup(ui.style())
+                .fill(theme.palette.surface_blur)
+                .stroke(egui::Stroke::new(1.0, theme.palette.border))
+                .corner_radius(egui::CornerRadius::same(theme.radius.lg))
+                .inner_margin(egui::Margin::same(theme.spacing.sm as i8))
+                .show(ui, |ui| {
+                    ui.set_min_width(width);
+                    ui.set_max_width(width);
+                    picked = date_picker_contents(ui, theme, visible_month, selected_date);
+                });
+        });
+
+    if let Some(date) = picked {
+        return Some(DatePickerAction::Pick(date));
+    }
+
+    let should_close = !button_clicked
+        && (ui.input(|input| input.key_pressed(egui::Key::Escape))
+            || area_response.response.clicked_elsewhere());
+    should_close.then_some(DatePickerAction::Close)
+}
+
 fn date_picker_contents(
     ui: &mut egui::Ui,
     theme: &Theme,
     visible_month: &mut NaiveDate,
     selected_date: Option<NaiveDate>,
-    picked: &mut Option<NaiveDate>,
-) {
+) -> Option<NaiveDate> {
+    let mut picked = None;
+
     ui.horizontal(|ui| {
         if ui.add_sized([30.0, 28.0], egui::Button::new("<")).clicked() {
             *visible_month = shift_month(*visible_month, -1);
@@ -2132,7 +2265,7 @@ fn date_picker_contents(
                 }
 
                 if ui.add(button).clicked() {
-                    *picked = Some(date);
+                    picked = Some(date);
                 }
 
                 column += 1;
@@ -2143,16 +2276,14 @@ fn date_picker_contents(
         });
 
     ui.add_space(8.0);
-    ui.horizontal(|ui| {
-        if ui
-            .frost_button(theme, "Today", ControlVariant::Secondary, ControlSize::Sm)
-            .clicked()
-        {
-            let today = current_date();
-            *visible_month = first_day_of_month(today);
-            *picked = Some(today);
-        }
-    });
+    if ui
+        .frost_button(theme, "Today", ControlVariant::Secondary, ControlSize::Sm)
+        .clicked()
+    {
+        picked = Some(today);
+    }
+
+    picked
 }
 
 fn shift_month(month: NaiveDate, delta: i32) -> NaiveDate {

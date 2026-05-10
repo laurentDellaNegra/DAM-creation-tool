@@ -647,10 +647,7 @@ fn paint_cursor_readout(
     position: egui::Pos2,
     coordinate: Coordinate,
 ) {
-    let label = format!(
-        "Lat {:>9.5}°  Lon {:>10.5}°",
-        coordinate.lat, coordinate.lon
-    );
+    let label = format!("{:.5} - {:.5}", coordinate.lat, coordinate.lon);
     let galley = painter.layout_no_wrap(label, egui::FontId::monospace(12.0), egui::Color32::WHITE);
     let padding = egui::vec2(8.0, 4.0);
     let size = galley.size() + padding * 2.0;
