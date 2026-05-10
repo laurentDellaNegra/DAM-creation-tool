@@ -5,7 +5,10 @@ mod payload;
 use crate::ValidationError;
 use thiserror::Error;
 
-pub use aixm::{AixmExportError, to_aixm_xml};
+pub use aixm::{
+    AixmExportError, AixmImportError, AixmXmlSummary, aixm_xml_well_formed, apply_aixm_xml_update,
+    summarize_aixm_xml, to_aixm_xml,
+};
 pub use json::DamExport;
 pub use json::to_pretty_json;
 pub use payload::{

@@ -10,6 +10,7 @@ use crate::frost_night::theme::Theme;
 #[derive(Clone, Copy, Debug)]
 pub struct ToolbarAction<'a> {
     pub icon: char,
+    pub label: &'a str,
     pub tooltip: &'a str,
     pub selected: bool,
     pub disabled: bool,
@@ -39,17 +40,34 @@ pub fn top_toolbar_with_id(
     let height = 36.0;
     let pad_h = theme.spacing.sm;
     let section_gap = theme.spacing.sm;
-    let icon_btn_size = 28.0;
-    let icon_size = 16.0;
+    let button_height = 28.0;
+    let icon_size = 14.0;
+    let icon_gap = theme.spacing.xs;
+    let label_font = egui::FontId::proportional(12.0);
+    let label_pad_h = theme.spacing.sm + 4.0;
     let sep_margin_v = theme.spacing.sm;
     let action_gap = theme.spacing.xs;
+    let label_galleys: Vec<_> = actions
+        .iter()
+        .map(|action| {
+            ui.painter().layout_no_wrap(
+                action.label.to_owned(),
+                label_font.clone(),
+                theme.palette.foreground,
+            )
+        })
+        .collect();
+    let button_widths: Vec<f32> = label_galleys
+        .iter()
+        .map(|galley| galley.size().x + icon_size + icon_gap + label_pad_h * 2.0)
+        .collect();
     let reset_separator_w = if actions.len() > 1 {
         section_gap * 2.0 + 1.0
     } else {
         0.0
     };
     let total_w = pad_h * 2.0
-        + actions.len() as f32 * icon_btn_size
+        + button_widths.iter().sum::<f32>()
         + action_gap * actions.len().saturating_sub(1) as f32
         + reset_separator_w;
 
@@ -82,8 +100,10 @@ pub fn top_toolbar_with_id(
                     ui.add_space(section_gap - action_gap);
                 }
 
-                let (rect, response) =
-                    ui.allocate_exact_size(Vec2::splat(icon_btn_size), Sense::click());
+                let (rect, response) = ui.allocate_exact_size(
+                    Vec2::new(button_widths[index], button_height),
+                    Sense::click(),
+                );
                 let response = response.on_hover_text(action.tooltip);
 
                 if !action.disabled && response.clicked() {
@@ -100,20 +120,32 @@ pub fn top_toolbar_with_id(
                     ui.painter().rect_filled(inset, inner_cr, fill);
                 }
 
-                let icon_color = if action.disabled {
+                let text_color = if action.disabled {
                     theme.palette.muted_foreground.gamma_multiply(0.5)
                 } else if action.selected || response.hovered() {
                     theme.palette.foreground
                 } else {
                     theme.palette.muted_foreground
                 };
+                let label_galley = &label_galleys[index];
+                let group_width = icon_size + icon_gap + label_galley.size().x;
+                let icon_pos = egui::pos2(
+                    rect.center().x - group_width / 2.0 + icon_size / 2.0,
+                    rect.center().y,
+                );
                 ui.painter().text(
-                    rect.center(),
+                    icon_pos,
                     egui::Align2::CENTER_CENTER,
                     action.icon.to_string(),
                     icon_font(icon_size),
-                    icon_color,
+                    text_color,
                 );
+                let text_pos = egui::pos2(
+                    rect.center().x - group_width / 2.0 + icon_size + icon_gap,
+                    rect.center().y - label_galley.size().y / 2.0,
+                );
+                ui.painter()
+                    .galley(text_pos, label_galley.clone(), text_color);
             }
         });
     }

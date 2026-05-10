@@ -14,7 +14,7 @@ use crate::frost_night::components::{checkbox as frost_checkbox, segmented};
 use crate::frost_night::composites::{ToolbarAction, top_toolbar_with_id};
 use crate::frost_night::containers::{DragCardState, drag_card, tabs_with_id};
 use crate::frost_night::icons::{
-    ICON_BOOK_OPEN, ICON_CIRCLE_X, ICON_CROSSHAIR, ICON_GLOBE, ICON_PLANE, ICON_RAINBOW,
+    ICON_BOOK_OPEN, ICON_CIRCLE_X, ICON_CROSSHAIR, ICON_EYE, ICON_GLOBE, ICON_PLANE, ICON_RAINBOW,
     ICON_TRASH, icon_text,
 };
 use crate::frost_night::theme::mix;
@@ -26,11 +26,13 @@ use crate::preview::PreviewOverlay;
 use crate::submission::{SubmissionEndpoint, SubmissionResult, SubmissionStatus, submit_payload};
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime};
 use dam_core::{
-    AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, MAX_PERIODS,
-    MAX_POLYGON_POINTS, ManualMapCategory, ManualMapRendering, MapCatalog, PreviewGeometry,
-    StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday, build_aixm_payload,
-    build_json_payload, bundled_catalog, switzerland_default_preview, unit_groups,
+    AixmXmlSummary, AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, Level,
+    LevelUnit, MAX_PERIODS, MAX_POLYGON_POINTS, ManualMapCategory, ManualMapRendering, MapCatalog,
+    PreviewGeometry, StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday,
+    aixm_xml_well_formed, apply_aixm_xml_update, build_aixm_payload, build_json_payload,
+    bundled_catalog, summarize_aixm_xml, switzerland_default_preview, unit_groups,
 };
+use std::time::Duration as StdDuration;
 
 pub struct DamApp {
     frost_theme: Theme,
@@ -48,8 +50,11 @@ pub struct DamApp {
     diagnostics_open: bool,
     submission_endpoint: Option<SubmissionEndpoint>,
     submission_status: SubmissionStatus,
+    toast_status_key: String,
+    toast_started_at: Option<f64>,
     pending_click_target: Option<ClickTarget>,
     previous_active_geometry: Option<ManualGeometryType>,
+    aixm_preview: AixmPreviewState,
 }
 
 const MANUAL_ATTRIBUTE_CATEGORIES: [ManualMapCategory; 6] = [
@@ -61,6 +66,12 @@ const MANUAL_ATTRIBUTE_CATEGORIES: [ManualMapCategory; 6] = [
     ManualMapCategory::Other,
 ];
 
+const AIXM_PREVIEW_PANEL_WIDTH: f32 = 560.0;
+const FLOATING_PANEL_MARGIN: f32 = 12.0;
+const AIXM_PREVIEW_FOOTER_HEIGHT: f32 = 48.0;
+const TOAST_VISIBLE_SECONDS: f64 = 5.0;
+const TOAST_VALIDATION_SECONDS: f64 = 8.0;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DateField {
     Start,
@@ -70,6 +81,47 @@ enum DateField {
 enum DatePickerAction {
     Pick(NaiveDate),
     Close,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AixmPreviewMode {
+    ReadOnly,
+    Editing,
+}
+
+#[derive(Debug, Clone)]
+struct AixmPreviewState {
+    open: bool,
+    mode: AixmPreviewMode,
+    xml: String,
+    clean_xml: String,
+    form_signature: String,
+    summary_xml: String,
+    summary: Option<Result<AixmXmlSummary, Vec<ValidationIssue>>>,
+    status: Option<SubmissionStatus>,
+    confirm_discard_close: bool,
+}
+
+impl Default for AixmPreviewState {
+    fn default() -> Self {
+        Self {
+            open: false,
+            mode: AixmPreviewMode::ReadOnly,
+            xml: String::new(),
+            clean_xml: String::new(),
+            form_signature: String::new(),
+            summary_xml: String::new(),
+            summary: None,
+            status: None,
+            confirm_discard_close: false,
+        }
+    }
+}
+
+impl AixmPreviewState {
+    fn is_dirty(&self) -> bool {
+        self.mode == AixmPreviewMode::Editing && self.xml != self.clean_xml
+    }
 }
 
 impl DateField {
@@ -122,8 +174,11 @@ impl DamApp {
             diagnostics_open: false,
             submission_endpoint: None,
             submission_status: SubmissionStatus::Idle,
+            toast_status_key: String::new(),
+            toast_started_at: None,
             pending_click_target: None,
             previous_active_geometry: None,
+            aixm_preview: AixmPreviewState::default(),
         }
     }
 }
@@ -154,8 +209,11 @@ impl eframe::App for DamApp {
             });
 
         self.toolbar(ui.ctx());
+        self.aixm_preview_overlay(ui.ctx());
+        self.submission_status_toast(ui.ctx());
         self.distribution_window(ui.ctx());
         self.reset_confirmation(ui.ctx());
+        self.aixm_discard_close_confirmation(ui.ctx());
     }
 }
 
@@ -577,24 +635,35 @@ impl DamApp {
                     &[
                         ToolbarAction {
                             icon: ICON_PLANE,
+                            label: "Send",
                             tooltip: "Send",
                             selected: false,
                             disabled: false,
                         },
                         ToolbarAction {
+                            icon: ICON_EYE,
+                            label: "Preview AIXM",
+                            tooltip: "Preview AIXM",
+                            selected: self.aixm_preview.open,
+                            disabled: false,
+                        },
+                        ToolbarAction {
                             icon: ICON_GLOBE,
+                            label: "Download AIXM",
                             tooltip: "Download AIXM",
                             selected: false,
                             disabled: false,
                         },
                         ToolbarAction {
                             icon: ICON_BOOK_OPEN,
+                            label: "Download JSON",
                             tooltip: "Download JSON",
                             selected: false,
                             disabled: false,
                         },
                         ToolbarAction {
                             icon: ICON_CIRCLE_X,
+                            label: "Reset",
                             tooltip: "Reset",
                             selected: false,
                             disabled: false,
@@ -604,12 +673,258 @@ impl DamApp {
 
                 match response.icon_clicked {
                     Some(0) => self.send(),
-                    Some(1) => self.download_aixm(),
-                    Some(2) => self.download_json(),
-                    Some(3) => self.show_reset_confirm = true,
+                    Some(1) => self.toggle_aixm_preview(),
+                    Some(2) => self.download_aixm(),
+                    Some(3) => self.download_json(),
+                    Some(4) => self.show_reset_confirm = true,
                     _ => {}
                 }
             });
+    }
+
+    fn toggle_aixm_preview(&mut self) {
+        if self.aixm_preview.open {
+            self.request_close_aixm_preview();
+        } else {
+            self.aixm_preview.open = true;
+            self.refresh_aixm_preview_from_form();
+        }
+    }
+
+    fn request_close_aixm_preview(&mut self) {
+        if self.aixm_preview.is_dirty() {
+            self.aixm_preview.confirm_discard_close = true;
+        } else {
+            self.aixm_preview.open = false;
+        }
+    }
+
+    fn refresh_aixm_preview_from_form(&mut self) {
+        if !self.aixm_preview.open || self.aixm_preview.is_dirty() {
+            return;
+        }
+
+        let form_signature = format!("{:?}", self.form);
+        if self.aixm_preview.form_signature == form_signature
+            && (!self.aixm_preview.clean_xml.is_empty() || self.aixm_preview.status.is_some())
+        {
+            return;
+        }
+
+        match self.build_aixm_payload_from_form() {
+            Ok(payload) => {
+                self.aixm_preview.xml = payload.body.clone();
+                self.aixm_preview.clean_xml = payload.body;
+                self.aixm_preview.form_signature = form_signature;
+                self.aixm_preview.status = None;
+                self.invalidate_aixm_summary_cache();
+            }
+            Err(status) => {
+                self.aixm_preview.xml.clear();
+                self.aixm_preview.clean_xml.clear();
+                self.aixm_preview.form_signature = form_signature;
+                self.aixm_preview.status = Some(status);
+                self.aixm_preview.mode = AixmPreviewMode::ReadOnly;
+                self.invalidate_aixm_summary_cache();
+            }
+        }
+    }
+
+    fn invalidate_aixm_summary_cache(&mut self) {
+        self.aixm_preview.summary_xml.clear();
+        self.aixm_preview.summary = None;
+    }
+
+    fn cached_aixm_summary(&mut self) -> Option<Result<AixmXmlSummary, Vec<ValidationIssue>>> {
+        if self.aixm_preview.xml.trim().is_empty() {
+            return None;
+        }
+        if self.aixm_preview.summary_xml != self.aixm_preview.xml {
+            self.aixm_preview.summary =
+                Some(summarize_aixm_xml(&self.aixm_preview.xml).map_err(|error| error.issues));
+            self.aixm_preview.summary_xml = self.aixm_preview.xml.clone();
+        }
+        self.aixm_preview.summary.clone()
+    }
+
+    fn discard_aixm_preview_changes(&mut self) {
+        self.aixm_preview.xml = self.aixm_preview.clean_xml.clone();
+        self.aixm_preview.mode = AixmPreviewMode::ReadOnly;
+        self.aixm_preview.status = None;
+        self.invalidate_aixm_summary_cache();
+        self.refresh_aixm_preview_from_form();
+    }
+
+    fn save_aixm_preview_xml(&mut self) {
+        let base = match self.form.to_creation(&self.catalog) {
+            Ok(creation) => creation,
+            Err(issues) => {
+                self.aixm_preview.status = Some(SubmissionStatus::Invalid(issues.clone()));
+                self.submission_status = SubmissionStatus::Invalid(issues);
+                return;
+            }
+        };
+
+        let candidate = match apply_aixm_xml_update(&base, &self.catalog, &self.aixm_preview.xml) {
+            Ok(candidate) => candidate,
+            Err(error) => {
+                self.aixm_preview.status = Some(SubmissionStatus::Invalid(error.issues.clone()));
+                self.submission_status = SubmissionStatus::Invalid(error.issues);
+                return;
+            }
+        };
+
+        let payload = match build_aixm_payload(&candidate) {
+            Ok(payload) => payload,
+            Err(error) => {
+                let status = status_from_export_error(error);
+                self.aixm_preview.status = Some(status.clone());
+                self.submission_status = status;
+                return;
+            }
+        };
+
+        self.form.apply_creation(&candidate, &self.catalog);
+        self.selected_period = self
+            .selected_period
+            .min(self.form.periods.len().saturating_sub(1));
+        if let Some(map) = self.form.selected_map(&self.catalog) {
+            center_map_on_static_map(&mut self.map_memory, map);
+        }
+        self.aixm_preview.xml = payload.body.clone();
+        self.aixm_preview.clean_xml = payload.body;
+        self.aixm_preview.form_signature = format!("{:?}", self.form);
+        self.aixm_preview.mode = AixmPreviewMode::ReadOnly;
+        self.aixm_preview.status = None;
+        self.invalidate_aixm_summary_cache();
+        self.submission_status = SubmissionStatus::Ready {
+            message: "AIXM preview saved to form.".to_owned(),
+        };
+    }
+
+    fn block_if_aixm_preview_dirty(&mut self, action: &str) -> bool {
+        if self.aixm_preview.is_dirty() {
+            self.submission_status = SubmissionStatus::Failed {
+                message: format!("Save or discard XML changes before {action}."),
+            };
+            true
+        } else {
+            false
+        }
+    }
+
+    fn aixm_preview_overlay(&mut self, ctx: &egui::Context) {
+        if !self.aixm_preview.open {
+            return;
+        }
+
+        let content_rect = ctx.content_rect();
+        let panel_width =
+            floating_aixm_panel_width(content_rect.width(), self.frost_theme.spacing.md);
+        let panel_height = (content_rect.height() - FLOATING_PANEL_MARGIN * 2.0).max(320.0);
+        let pos = egui::pos2(
+            content_rect.right() - FLOATING_PANEL_MARGIN - panel_width,
+            content_rect.top() + FLOATING_PANEL_MARGIN,
+        );
+        let size = egui::vec2(panel_width, panel_height);
+
+        egui::Area::new(egui::Id::new("aixm_preview_overlay"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(pos)
+            .show(ctx, |ui| {
+                ui.set_min_size(size);
+                ui.set_max_size(size);
+                egui::Frame::new()
+                    .fill(self.frost_theme.palette.background)
+                    .stroke(egui::Stroke::new(1.0, self.frost_theme.palette.border))
+                    .corner_radius(egui::CornerRadius::same(self.frost_theme.radius.lg))
+                    .inner_margin(egui::Margin::same(self.frost_theme.spacing.md as i8))
+                    .show(ui, |ui| {
+                        ui.set_min_size(
+                            size - egui::vec2(
+                                self.frost_theme.spacing.md * 2.0,
+                                self.frost_theme.spacing.md * 2.0,
+                            ),
+                        );
+                        ui.set_max_size(
+                            size - egui::vec2(
+                                self.frost_theme.spacing.md * 2.0,
+                                self.frost_theme.spacing.md * 2.0,
+                            ),
+                        );
+                        self.aixm_preview_panel(ui);
+                    });
+            });
+    }
+
+    fn submission_status_toast(&mut self, ctx: &egui::Context) {
+        if self.submission_status.is_idle() {
+            self.toast_status_key.clear();
+            self.toast_started_at = None;
+            return;
+        }
+
+        let status_key = submission_status_key(&self.submission_status);
+        let now = ctx.input(|input| input.time);
+        if self.toast_status_key != status_key {
+            self.toast_status_key = status_key;
+            self.toast_started_at = Some(now);
+        }
+        let timeout = toast_timeout_seconds(&self.submission_status);
+        if let Some(started_at) = self.toast_started_at
+            && now - started_at >= timeout
+        {
+            self.submission_status = SubmissionStatus::Idle;
+            self.toast_status_key.clear();
+            self.toast_started_at = None;
+            return;
+        }
+        if let Some(started_at) = self.toast_started_at
+            && timeout.is_finite()
+        {
+            let remaining = (timeout - (now - started_at)).max(0.05);
+            ctx.request_repaint_after(StdDuration::from_secs_f64(remaining));
+        }
+
+        let content_rect = ctx.content_rect();
+        let preview_width =
+            floating_aixm_panel_width(content_rect.width(), self.frost_theme.spacing.md);
+        let preview_offset = if self.aixm_preview.open {
+            preview_width + FLOATING_PANEL_MARGIN
+        } else {
+            0.0
+        };
+        let toast_width = 420.0_f32.min((content_rect.width() - 32.0).max(280.0));
+        let toast_x = (content_rect.right() - FLOATING_PANEL_MARGIN - preview_offset - toast_width)
+            .max(content_rect.left() + FLOATING_PANEL_MARGIN);
+        let pos = egui::pos2(toast_x, content_rect.bottom() - FLOATING_PANEL_MARGIN);
+        let mut dismiss = false;
+
+        egui::Area::new(egui::Id::new("submission_status_toast"))
+            .order(egui::Order::Foreground)
+            .pivot(egui::Align2::LEFT_BOTTOM)
+            .fixed_pos(pos)
+            .show(ctx, |ui| {
+                ui.set_width(toast_width);
+                egui::Frame::new()
+                    .fill(self.frost_theme.palette.surface_blur)
+                    .stroke(egui::Stroke::new(1.0, self.frost_theme.palette.border))
+                    .corner_radius(egui::CornerRadius::same(self.frost_theme.radius.lg))
+                    .inner_margin(egui::Margin::same(self.frost_theme.spacing.md as i8))
+                    .show(ui, |ui| {
+                        dismiss = render_submission_status_toast(
+                            ui,
+                            &self.frost_theme,
+                            &self.submission_status,
+                        );
+                    });
+            });
+
+        if dismiss {
+            self.submission_status = SubmissionStatus::Idle;
+            self.toast_status_key.clear();
+            self.toast_started_at = None;
+        }
     }
 
     fn form_panel(&mut self, ui: &mut egui::Ui) {
@@ -630,9 +945,6 @@ impl DamApp {
                 self.form_section(ui, "Additional Information", |this, ui| {
                     this.text_section(ui);
                 });
-                if !self.submission_status.is_idle() {
-                    self.form_section(ui, "Status", |this, ui| this.validation_section(ui));
-                }
                 self.form_section(ui, "Diagnostics", |this, ui| this.diagnostics_section(ui));
             });
     }
@@ -1222,34 +1534,6 @@ impl DamApp {
         );
     }
 
-    fn validation_section(&mut self, ui: &mut egui::Ui) {
-        match &self.submission_status {
-            SubmissionStatus::Idle => {}
-            SubmissionStatus::Invalid(issues) => {
-                ui.colored_label(
-                    self.frost_theme.palette.destructive,
-                    "Blocked by validation errors.",
-                );
-                render_validation_issues(ui, &self.frost_theme, issues);
-            }
-            SubmissionStatus::Building => {
-                ui.label("Building submission payload...");
-            }
-            SubmissionStatus::Ready { message } => {
-                ui.label(message);
-            }
-            SubmissionStatus::Submitting => {
-                ui.label("Submitting payload...");
-            }
-            SubmissionStatus::Sent { message } => {
-                ui.label(message);
-            }
-            SubmissionStatus::Failed { message } => {
-                ui.colored_label(self.frost_theme.palette.destructive, message);
-            }
-        }
-    }
-
     fn diagnostics_section(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("Developer diagnostics")
             .default_open(self.diagnostics_open)
@@ -1259,6 +1543,209 @@ impl DamApp {
                 ui.label("Tiles: online CARTO Dark Matter raster tiles.");
                 ui.label(format!("Build: {}", env!("CARGO_PKG_VERSION")));
             });
+    }
+
+    fn aixm_preview_panel(&mut self, ui: &mut egui::Ui) {
+        self.refresh_aixm_preview_from_form();
+
+        let mut edit_clicked = false;
+        let mut save_clicked = false;
+        let mut discard_clicked = false;
+        let mut send_clicked = false;
+
+        self.aixm_preview_header(ui);
+        ui.separator();
+        ui.add_space(self.frost_theme.spacing.sm);
+
+        let show_editor = self.aixm_preview_fixed_content(ui);
+        if show_editor {
+            ui.add_space(self.frost_theme.spacing.sm);
+        }
+
+        let footer_block_height =
+            AIXM_PREVIEW_FOOTER_HEIGHT + self.frost_theme.spacing.xs * 2.0 + 1.0;
+        let editor_height = (ui.available_height() - footer_block_height).max(72.0);
+        if show_editor {
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), editor_height),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("aixm_preview_editor_scroll")
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| self.aixm_preview_editor(ui));
+                },
+            );
+        } else {
+            ui.allocate_space(egui::vec2(ui.available_width(), editor_height));
+        }
+
+        ui.add_space(self.frost_theme.spacing.xs);
+        ui.separator();
+        ui.add_space(self.frost_theme.spacing.xs);
+        self.aixm_preview_footer(
+            ui,
+            &mut edit_clicked,
+            &mut save_clicked,
+            &mut discard_clicked,
+            &mut send_clicked,
+        );
+
+        if edit_clicked {
+            self.aixm_preview.mode = AixmPreviewMode::Editing;
+        }
+        if save_clicked {
+            self.save_aixm_preview_xml();
+        }
+        if discard_clicked {
+            self.discard_aixm_preview_changes();
+        }
+        if send_clicked {
+            self.send();
+        }
+    }
+
+    fn aixm_preview_header(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            section_heading_inline(ui, &self.frost_theme, "AIXM Preview");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if borderless_icon_button(
+                    ui,
+                    &self.frost_theme,
+                    ICON_CIRCLE_X,
+                    "Close AIXM preview",
+                )
+                .clicked()
+                {
+                    self.request_close_aixm_preview();
+                }
+            });
+        });
+    }
+
+    fn aixm_preview_fixed_content(&mut self, ui: &mut egui::Ui) -> bool {
+        if let Some(status) = self.aixm_preview.status.clone() {
+            render_aixm_preview_status(ui, &self.frost_theme, &status);
+            return false;
+        }
+
+        if self.aixm_preview.xml.trim().is_empty() {
+            ui.label("No AIXM payload is available.");
+            return false;
+        }
+
+        let summary = self.cached_aixm_summary();
+        match &summary {
+            Some(Ok(summary)) => render_aixm_summary(ui, &self.frost_theme, summary),
+            Some(Err(issues)) => {
+                ui.colored_label(
+                    self.frost_theme.palette.destructive,
+                    "AIXM summary is unavailable.",
+                );
+                render_validation_issues(ui, &self.frost_theme, issues);
+            }
+            None => {}
+        }
+
+        if self.aixm_preview.mode == AixmPreviewMode::Editing {
+            match aixm_xml_well_formed(&self.aixm_preview.xml) {
+                Ok(()) => {
+                    ui.colored_label(egui::Color32::LIGHT_GREEN, "XML is well formed.");
+                }
+                Err(error) => {
+                    render_validation_issues(ui, &self.frost_theme, &error.issues);
+                }
+            }
+        }
+
+        true
+    }
+
+    fn aixm_preview_editor(&mut self, ui: &mut egui::Ui) {
+        let editable = self.aixm_preview.mode == AixmPreviewMode::Editing;
+        themed_text_edit_enabled(
+            ui,
+            &self.frost_theme,
+            editable,
+            egui::TextEdit::multiline(&mut self.aixm_preview.xml)
+                .font(egui::TextStyle::Monospace)
+                .desired_rows(28)
+                .desired_width(f32::INFINITY),
+            ControlSize::Sm,
+        );
+    }
+
+    fn aixm_preview_footer(
+        &mut self,
+        ui: &mut egui::Ui,
+        edit_clicked: &mut bool,
+        save_clicked: &mut bool,
+        discard_clicked: &mut bool,
+        send_clicked: &mut bool,
+    ) {
+        let editable = self.aixm_preview.mode == AixmPreviewMode::Editing;
+        let can_edit =
+            self.aixm_preview.status.is_none() && !self.aixm_preview.xml.trim().is_empty();
+        ui.allocate_ui_with_layout(
+            egui::vec2(
+                ui.available_width(),
+                AIXM_PREVIEW_FOOTER_HEIGHT - self.frost_theme.spacing.xs,
+            ),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                if editable {
+                    if ui
+                        .frost_button(
+                            &self.frost_theme,
+                            "Save XML",
+                            ControlVariant::Primary,
+                            ControlSize::Md,
+                        )
+                        .clicked()
+                    {
+                        *save_clicked = true;
+                    }
+                    if ui
+                        .frost_button(
+                            &self.frost_theme,
+                            "Discard XML changes",
+                            ControlVariant::Outline,
+                            ControlSize::Md,
+                        )
+                        .clicked()
+                    {
+                        *discard_clicked = true;
+                    }
+                } else if ui
+                    .add_enabled_ui(can_edit, |ui| {
+                        ui.frost_button(
+                            &self.frost_theme,
+                            "Edit XML",
+                            ControlVariant::Secondary,
+                            ControlSize::Md,
+                        )
+                    })
+                    .inner
+                    .clicked()
+                {
+                    *edit_clicked = true;
+                }
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .frost_button(
+                            &self.frost_theme,
+                            "Send",
+                            ControlVariant::Primary,
+                            ControlSize::Md,
+                        )
+                        .clicked()
+                    {
+                        *send_clicked = true;
+                    }
+                });
+            },
+        );
     }
 
     fn preview_panel(&mut self, ui: &mut egui::Ui) {
@@ -1529,7 +2016,61 @@ impl DamApp {
         self.show_reset_confirm = open;
     }
 
+    fn aixm_discard_close_confirmation(&mut self, ctx: &egui::Context) {
+        if !self.aixm_preview.confirm_discard_close {
+            return;
+        }
+
+        let mut open = self.aixm_preview.confirm_discard_close;
+        let mut discard = false;
+        let mut keep_editing = false;
+        egui::Window::new("Discard XML changes?")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label("Close the AIXM preview and discard unsaved XML edits?");
+                ui.horizontal(|ui| {
+                    if ui
+                        .frost_button(
+                            &self.frost_theme,
+                            "Discard and close",
+                            ControlVariant::Destructive,
+                            ControlSize::Md,
+                        )
+                        .clicked()
+                    {
+                        discard = true;
+                    }
+                    if ui
+                        .frost_button(
+                            &self.frost_theme,
+                            "Keep editing",
+                            ControlVariant::Outline,
+                            ControlSize::Md,
+                        )
+                        .clicked()
+                    {
+                        keep_editing = true;
+                    }
+                });
+            });
+
+        if discard {
+            self.discard_aixm_preview_changes();
+            self.aixm_preview.open = false;
+            open = false;
+        }
+        if keep_editing {
+            open = false;
+        }
+        self.aixm_preview.confirm_discard_close = open;
+    }
+
     fn send(&mut self) {
+        if self.block_if_aixm_preview_dirty("sending") {
+            return;
+        }
         self.submission_status = SubmissionStatus::Building;
         let payload = match self.build_aixm_payload_from_form() {
             Ok(payload) => payload,
@@ -1547,6 +2088,9 @@ impl DamApp {
     }
 
     fn download_aixm(&mut self) {
+        if self.block_if_aixm_preview_dirty("downloading AIXM") {
+            return;
+        }
         self.submission_status = SubmissionStatus::Building;
         let payload = match self.build_aixm_payload_from_form() {
             Ok(payload) => payload,
@@ -1615,6 +2159,194 @@ fn render_validation_issues(ui: &mut egui::Ui, theme: &Theme, issues: &[Validati
     for issue in issues {
         ui.label(format!("{}: {}", issue.field, issue.message));
     }
+}
+
+fn submission_status_key(status: &SubmissionStatus) -> String {
+    match status {
+        SubmissionStatus::Idle => "idle".to_owned(),
+        SubmissionStatus::Invalid(issues) => format!("invalid:{issues:?}"),
+        SubmissionStatus::Building => "building".to_owned(),
+        SubmissionStatus::Ready { message } => format!("ready:{message}"),
+        SubmissionStatus::Submitting => "submitting".to_owned(),
+        SubmissionStatus::Sent { message } => format!("sent:{message}"),
+        SubmissionStatus::Failed { message } => format!("failed:{message}"),
+    }
+}
+
+fn toast_timeout_seconds(status: &SubmissionStatus) -> f64 {
+    match status {
+        SubmissionStatus::Building | SubmissionStatus::Submitting => f64::INFINITY,
+        SubmissionStatus::Invalid(_) => TOAST_VALIDATION_SECONDS,
+        SubmissionStatus::Idle
+        | SubmissionStatus::Ready { .. }
+        | SubmissionStatus::Sent { .. }
+        | SubmissionStatus::Failed { .. } => TOAST_VISIBLE_SECONDS,
+    }
+}
+
+fn render_submission_status_toast(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    status: &SubmissionStatus,
+) -> bool {
+    let (title, title_color) = match status {
+        SubmissionStatus::Idle => return false,
+        SubmissionStatus::Invalid(_) => ("Validation blocked", theme.palette.destructive),
+        SubmissionStatus::Building => ("Building payload", theme.palette.ring),
+        SubmissionStatus::Ready { .. } => ("Export ready", theme.palette.foreground),
+        SubmissionStatus::Submitting => ("Submitting", theme.palette.ring),
+        SubmissionStatus::Sent { .. } => ("Sent", theme.palette.foreground),
+        SubmissionStatus::Failed { .. } => ("Action failed", theme.palette.destructive),
+    };
+
+    let mut dismiss = false;
+    ui.horizontal(|ui| {
+        ui.colored_label(title_color, egui::RichText::new(title).strong());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if borderless_icon_button(ui, theme, ICON_CIRCLE_X, "Dismiss status").clicked() {
+                dismiss = true;
+            }
+        });
+    });
+    ui.add_space(theme.spacing.xs);
+
+    match status {
+        SubmissionStatus::Idle => {}
+        SubmissionStatus::Invalid(issues) => {
+            for issue in issues.iter().take(4) {
+                wrapped_label(ui, format!("{}: {}", issue.field, issue.message));
+            }
+            if issues.len() > 4 {
+                wrapped_label(ui, format!("{} more issue(s)", issues.len() - 4));
+            }
+        }
+        SubmissionStatus::Building => {
+            wrapped_label(ui, "Building submission payload...");
+        }
+        SubmissionStatus::Ready { message }
+        | SubmissionStatus::Sent { message }
+        | SubmissionStatus::Failed { message } => {
+            wrapped_label(ui, message);
+        }
+        SubmissionStatus::Submitting => {
+            wrapped_label(ui, "Submitting payload...");
+        }
+    }
+
+    dismiss
+}
+
+fn wrapped_label(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) {
+    ui.add(egui::Label::new(text).wrap());
+}
+
+fn render_aixm_preview_status(ui: &mut egui::Ui, theme: &Theme, status: &SubmissionStatus) {
+    match status {
+        SubmissionStatus::Idle => {}
+        SubmissionStatus::Invalid(issues) => {
+            ui.colored_label(
+                theme.palette.destructive,
+                "AIXM preview is blocked by validation errors.",
+            );
+            render_validation_issues(ui, theme, issues);
+        }
+        SubmissionStatus::Building => {
+            ui.label("Building AIXM preview...");
+        }
+        SubmissionStatus::Ready { message }
+        | SubmissionStatus::Sent { message }
+        | SubmissionStatus::Failed { message } => {
+            let color = if matches!(status, SubmissionStatus::Failed { .. }) {
+                theme.palette.destructive
+            } else {
+                theme.palette.foreground
+            };
+            ui.colored_label(color, message);
+        }
+        SubmissionStatus::Submitting => {
+            ui.label("Submitting payload...");
+        }
+    }
+}
+
+fn render_aixm_summary(ui: &mut egui::Ui, theme: &Theme, summary: &AixmXmlSummary) {
+    egui::Frame::new()
+        .fill(theme.palette.surface_blur)
+        .stroke(egui::Stroke::new(1.0, theme.palette.border))
+        .corner_radius(egui::CornerRadius::same(theme.radius.md))
+        .inner_margin(egui::Margin::same(theme.spacing.sm as i8))
+        .show(ui, |ui| {
+            egui::Grid::new("aixm_preview_summary")
+                .num_columns(2)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label("Map");
+                    ui.label(format!("{} - {}", summary.map_id, summary.map_name));
+                    ui.end_row();
+                    ui.label("Validity");
+                    ui.label(format!(
+                        "{} to {}",
+                        summary.start_date.format("%Y-%m-%d"),
+                        summary.end_date.format("%Y-%m-%d")
+                    ));
+                    ui.end_row();
+                    ui.label("Time");
+                    ui.label(format!(
+                        "{} to {}",
+                        summary.start_time.format("%H:%M"),
+                        summary.end_time.format("%H:%M")
+                    ));
+                    ui.end_row();
+                    ui.label("Levels");
+                    ui.label(format!(
+                        "{} / {}",
+                        format_summary_level(summary.lower_level),
+                        format_summary_level(summary.upper_level)
+                    ));
+                    ui.end_row();
+                    ui.label("Display");
+                    ui.label(format!(
+                        "levels={}, begin={}, end={}",
+                        yes_no_label(summary.display_levels),
+                        yes_no_label(summary.display_begin_time),
+                        yes_no_label(summary.display_end_time)
+                    ));
+                    ui.end_row();
+                    ui.label("Geometry");
+                    ui.label(format!(
+                        "{} point(s), label {:.6} {:.6}",
+                        summary.geometry_points,
+                        summary.label_position.lon,
+                        summary.label_position.lat
+                    ));
+                    ui.end_row();
+                });
+        });
+}
+
+fn section_heading_inline(ui: &mut egui::Ui, theme: &Theme, title: &str) {
+    let rect = ui
+        .allocate_exact_size(egui::vec2(3.0, 18.0), egui::Sense::hover())
+        .0;
+    ui.painter().rect_filled(rect, 1.5, theme.palette.ring);
+    ui.heading(egui::RichText::new(title).color(theme.palette.foreground));
+}
+
+fn format_summary_level(level: Level) -> String {
+    match level.unit {
+        LevelUnit::FlightLevel => format!("FL{:03}", level.value),
+        LevelUnit::Feet => format!("{} ft", level.value),
+    }
+}
+
+fn yes_no_label(value: bool) -> &'static str {
+    if value { "YES" } else { "NO" }
+}
+
+fn floating_aixm_panel_width(content_width: f32, inner_spacing: f32) -> f32 {
+    let max_width = (content_width - FLOATING_PANEL_MARGIN * 2.0).max(320.0);
+    let preferred = AIXM_PREVIEW_PANEL_WIDTH.max(inner_spacing * 24.0);
+    preferred.min(max_width)
 }
 
 fn status_from_export_error(error: dam_core::ExportError) -> SubmissionStatus {
@@ -1714,6 +2446,20 @@ fn themed_icon_button(
         ui.frost_button(theme, icon_text(icon, 15.0), variant, ControlSize::Sm)
     })
     .inner
+    .on_hover_text(tooltip)
+}
+
+fn borderless_icon_button(
+    ui: &mut egui::Ui,
+    theme: &Theme,
+    icon: char,
+    tooltip: &str,
+) -> egui::Response {
+    ui.add(
+        egui::Button::new(icon_text(icon, 15.0).color(theme.palette.muted_foreground))
+            .frame(false)
+            .min_size(egui::Vec2::splat(24.0)),
+    )
     .on_hover_text(tooltip)
 }
 
