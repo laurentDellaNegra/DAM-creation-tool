@@ -67,6 +67,8 @@ const MANUAL_ATTRIBUTE_CATEGORIES: [ManualMapCategory; 6] = [
 ];
 
 const AIXM_PREVIEW_PANEL_WIDTH: f32 = 560.0;
+const AIXM_PREVIEW_PANEL_MIN_WIDTH: f32 = 320.0;
+const AIXM_PREVIEW_RESIZE_HANDLE_WIDTH: f32 = 8.0;
 const FLOATING_PANEL_MARGIN: f32 = 12.0;
 const AIXM_PREVIEW_FOOTER_HEIGHT: f32 = 48.0;
 const TOAST_VISIBLE_SECONDS: f64 = 5.0;
@@ -93,6 +95,7 @@ enum AixmPreviewMode {
 struct AixmPreviewState {
     open: bool,
     mode: AixmPreviewMode,
+    width: f32,
     xml: String,
     clean_xml: String,
     form_signature: String,
@@ -107,6 +110,7 @@ impl Default for AixmPreviewState {
         Self {
             open: false,
             mode: AixmPreviewMode::ReadOnly,
+            width: AIXM_PREVIEW_PANEL_WIDTH,
             xml: String::new(),
             clean_xml: String::new(),
             form_signature: String::new(),
@@ -1017,14 +1021,20 @@ impl DamApp {
         }
 
         let content_rect = ctx.content_rect();
-        let panel_width =
-            floating_aixm_panel_width(content_rect.width(), self.frost_theme.spacing.md);
-        let panel_height = (content_rect.height() - FLOATING_PANEL_MARGIN * 2.0).max(320.0);
+        self.aixm_preview.width =
+            clamp_aixm_panel_width(self.aixm_preview.width, content_rect.width());
+        let panel_width = self.aixm_preview.width;
+        let panel_height = (content_rect.height() - FLOATING_PANEL_MARGIN * 2.0).max(0.0);
         let pos = egui::pos2(
             content_rect.right() - FLOATING_PANEL_MARGIN - panel_width,
             content_rect.top() + FLOATING_PANEL_MARGIN,
         );
         let size = egui::vec2(panel_width, panel_height);
+        let inner_spacing = self.frost_theme.spacing.md;
+        let inner_size = egui::vec2(
+            (size.x - inner_spacing * 2.0).max(0.0),
+            (size.y - inner_spacing * 2.0).max(0.0),
+        );
 
         egui::Area::new(egui::Id::new("aixm_preview_overlay"))
             .order(egui::Order::Foreground)
@@ -1038,20 +1048,37 @@ impl DamApp {
                     .corner_radius(egui::CornerRadius::same(self.frost_theme.radius.lg))
                     .inner_margin(egui::Margin::same(self.frost_theme.spacing.md as i8))
                     .show(ui, |ui| {
-                        ui.set_min_size(
-                            size - egui::vec2(
-                                self.frost_theme.spacing.md * 2.0,
-                                self.frost_theme.spacing.md * 2.0,
-                            ),
-                        );
-                        ui.set_max_size(
-                            size - egui::vec2(
-                                self.frost_theme.spacing.md * 2.0,
-                                self.frost_theme.spacing.md * 2.0,
-                            ),
-                        );
+                        ui.set_min_size(inner_size);
+                        ui.set_max_size(inner_size);
                         self.aixm_preview_panel(ui);
                     });
+            });
+
+        egui::Area::new(egui::Id::new("aixm_preview_resize_handle"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(pos)
+            .show(ctx, |ui| {
+                let handle_size = egui::vec2(AIXM_PREVIEW_RESIZE_HANDLE_WIDTH, panel_height);
+                ui.set_min_size(handle_size);
+                ui.set_max_size(handle_size);
+
+                let (rect, response) = ui.allocate_exact_size(handle_size, egui::Sense::drag());
+                if response.hovered() || response.dragged() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                }
+                if response.dragged() {
+                    self.aixm_preview.width = clamp_aixm_panel_width(
+                        self.aixm_preview.width - response.drag_delta().x,
+                        content_rect.width(),
+                    );
+                    ctx.request_repaint();
+                }
+                if response.hovered() || response.dragged() {
+                    ui.painter().line_segment(
+                        [rect.center_top(), rect.center_bottom()],
+                        egui::Stroke::new(1.0, self.frost_theme.palette.ring),
+                    );
+                }
             });
     }
 
@@ -1085,9 +1112,9 @@ impl DamApp {
         }
 
         let content_rect = ctx.content_rect();
-        let preview_width =
-            floating_aixm_panel_width(content_rect.width(), self.frost_theme.spacing.md);
         let preview_offset = if self.aixm_preview.open {
+            let preview_width =
+                clamp_aixm_panel_width(self.aixm_preview.width, content_rect.width());
             preview_width + FLOATING_PANEL_MARGIN
         } else {
             0.0
@@ -2549,10 +2576,11 @@ fn yes_no_label(value: bool) -> &'static str {
     if value { "YES" } else { "NO" }
 }
 
-fn floating_aixm_panel_width(content_width: f32, inner_spacing: f32) -> f32 {
-    let max_width = (content_width - FLOATING_PANEL_MARGIN * 2.0).max(320.0);
-    let preferred = AIXM_PREVIEW_PANEL_WIDTH.max(inner_spacing * 24.0);
-    preferred.min(max_width)
+fn clamp_aixm_panel_width(requested_width: f32, content_width: f32) -> f32 {
+    let max_width = (content_width - FLOATING_PANEL_MARGIN * 2.0).max(AIXM_PREVIEW_PANEL_MIN_WIDTH);
+    requested_width
+        .max(AIXM_PREVIEW_PANEL_MIN_WIDTH)
+        .min(max_width)
 }
 
 fn status_from_export_error(error: dam_core::ExportError) -> SubmissionStatus {
