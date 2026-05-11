@@ -188,6 +188,7 @@ impl eframe::App for DamApp {
         self.form.sync_weekdays_from_dates();
         self.maybe_auto_focus_on_geometry_change(ui.ctx());
         self.update_click_target_from_memory(ui.ctx());
+        self.cancel_manual_drawing_on_escape(ui.ctx());
 
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(self.frost_theme.palette.background))
@@ -266,6 +267,190 @@ fn themed_text_edit_enabled(
         )
     })
     .inner
+}
+
+#[derive(Clone, Copy)]
+struct XmlSyntaxColors {
+    text: egui::Color32,
+    punctuation: egui::Color32,
+    element: egui::Color32,
+    attribute: egui::Color32,
+    value: egui::Color32,
+    comment: egui::Color32,
+    processing_instruction: egui::Color32,
+}
+
+impl XmlSyntaxColors {
+    fn from_theme(theme: &Theme) -> Self {
+        Self {
+            text: theme.palette.foreground,
+            punctuation: theme.palette.secondary_foreground,
+            element: egui::Color32::from_rgb(0x7D, 0xD3, 0xFC),
+            attribute: egui::Color32::from_rgb(0xC4, 0xB5, 0xFD),
+            value: egui::Color32::from_rgb(0x86, 0xEF, 0xAC),
+            comment: theme.palette.muted_foreground,
+            processing_instruction: egui::Color32::from_rgb(0xF8, 0xD4, 0x70),
+        }
+    }
+}
+
+fn xml_syntax_layout_job(text: &str, theme: &Theme) -> egui::text::LayoutJob {
+    let colors = XmlSyntaxColors::from_theme(theme);
+    let font_id = egui::FontId::monospace(12.0);
+    let mut job = egui::text::LayoutJob::default();
+    let mut i = 0;
+
+    while i < text.len() {
+        let remaining = &text[i..];
+        if remaining.starts_with("<!--") {
+            let end = remaining
+                .find("-->")
+                .map_or(text.len(), |offset| i + offset + "-->".len());
+            append_xml_segment(&mut job, &text[i..end], &font_id, colors.comment);
+            i = end;
+        } else if remaining.starts_with("<![CDATA[") {
+            let end = remaining
+                .find("]]>")
+                .map_or(text.len(), |offset| i + offset + "]]>".len());
+            append_xml_segment(&mut job, &text[i..end], &font_id, colors.value);
+            i = end;
+        } else if remaining.starts_with("<?") {
+            let end = remaining
+                .find("?>")
+                .map_or(text.len(), |offset| i + offset + "?>".len());
+            append_xml_segment(
+                &mut job,
+                &text[i..end],
+                &font_id,
+                colors.processing_instruction,
+            );
+            i = end;
+        } else if remaining.starts_with('<') {
+            i = append_xml_tag(&mut job, text, i, &font_id, &colors);
+        } else {
+            let end = remaining.find('<').map_or(text.len(), |offset| i + offset);
+            append_xml_segment(&mut job, &text[i..end], &font_id, colors.text);
+            i = end;
+        }
+    }
+
+    job
+}
+
+fn append_xml_tag(
+    job: &mut egui::text::LayoutJob,
+    text: &str,
+    start: usize,
+    font_id: &egui::FontId,
+    colors: &XmlSyntaxColors,
+) -> usize {
+    let mut i = start;
+    append_xml_segment(job, &text[i..i + 1], font_id, colors.punctuation);
+    i += 1;
+
+    if text[i..].starts_with('/') {
+        append_xml_segment(job, &text[i..i + 1], font_id, colors.punctuation);
+        i += 1;
+    } else if text[i..].starts_with('!') {
+        append_xml_segment(job, &text[i..i + 1], font_id, colors.punctuation);
+        i += 1;
+        let end = text[i..].find('>').map_or(text.len(), |offset| i + offset);
+        append_xml_segment(job, &text[i..end], font_id, colors.processing_instruction);
+        if end < text.len() {
+            append_xml_segment(job, &text[end..end + 1], font_id, colors.punctuation);
+            return end + 1;
+        }
+        return end;
+    }
+
+    let mut first_name = true;
+    while i < text.len() {
+        if text[i..].starts_with("/>") {
+            append_xml_segment(job, &text[i..i + 2], font_id, colors.punctuation);
+            return i + 2;
+        }
+
+        let ch = text[i..].chars().next().expect("valid utf-8 boundary");
+        if ch == '>' {
+            append_xml_segment(
+                job,
+                &text[i..i + ch.len_utf8()],
+                font_id,
+                colors.punctuation,
+            );
+            return i + ch.len_utf8();
+        }
+
+        if ch.is_whitespace() {
+            let end = scan_xml_whitespace(text, i);
+            append_xml_segment(job, &text[i..end], font_id, colors.text);
+            i = end;
+        } else if ch == '=' {
+            append_xml_segment(
+                job,
+                &text[i..i + ch.len_utf8()],
+                font_id,
+                colors.punctuation,
+            );
+            i += ch.len_utf8();
+        } else if ch == '"' || ch == '\'' {
+            let end = scan_xml_quoted_value(text, i, ch);
+            append_xml_segment(job, &text[i..end], font_id, colors.value);
+            i = end;
+        } else {
+            let end = scan_xml_name(text, i);
+            let color = if first_name {
+                first_name = false;
+                colors.element
+            } else {
+                colors.attribute
+            };
+            append_xml_segment(job, &text[i..end], font_id, color);
+            i = end;
+        }
+    }
+
+    i
+}
+
+fn scan_xml_whitespace(text: &str, start: usize) -> usize {
+    for (offset, ch) in text[start..].char_indices() {
+        if !ch.is_whitespace() {
+            return start + offset;
+        }
+    }
+    text.len()
+}
+
+fn scan_xml_name(text: &str, start: usize) -> usize {
+    for (offset, ch) in text[start..].char_indices() {
+        if ch.is_whitespace() || matches!(ch, '=' | '/' | '>' | '<' | '"' | '\'') {
+            return if offset == 0 {
+                start + ch.len_utf8()
+            } else {
+                start + offset
+            };
+        }
+    }
+    text.len()
+}
+
+fn scan_xml_quoted_value(text: &str, start: usize, quote: char) -> usize {
+    let value_start = start + quote.len_utf8();
+    text[value_start..]
+        .find(quote)
+        .map_or(text.len(), |offset| value_start + offset + quote.len_utf8())
+}
+
+fn append_xml_segment(
+    job: &mut egui::text::LayoutJob,
+    text: &str,
+    font_id: &egui::FontId,
+    color: egui::Color32,
+) {
+    if !text.is_empty() {
+        job.append(text, 0.0, egui::TextFormat::simple(font_id.clone(), color));
+    }
 }
 
 fn colored_segmented(
@@ -576,6 +761,19 @@ impl DamApp {
                     self.pending_click_target = None;
                 }
             }
+        }
+    }
+
+    fn cancel_manual_drawing_on_escape(&mut self, ctx: &egui::Context) {
+        if self.form.map_mode != MapMode::Manual
+            || self.pending_click_target.is_none()
+            || !ctx.input(|input| input.key_pressed(egui::Key::Escape))
+        {
+            return;
+        }
+
+        if let Some(target) = self.pending_click_target.take() {
+            self.surrender_click_target_focus(ctx, target);
         }
     }
 
@@ -1663,12 +1861,20 @@ impl DamApp {
 
     fn aixm_preview_editor(&mut self, ui: &mut egui::Ui) {
         let editable = self.aixm_preview.mode == AixmPreviewMode::Editing;
+        let highlight_theme = self.frost_theme.clone();
+        let mut layouter = move |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| {
+            let mut job = xml_syntax_layout_job(text.as_str(), &highlight_theme);
+            job.wrap.max_width = wrap_width;
+            ui.fonts_mut(|fonts| fonts.layout_job(job))
+        };
+
         themed_text_edit_enabled(
             ui,
             &self.frost_theme,
             editable,
             egui::TextEdit::multiline(&mut self.aixm_preview.xml)
                 .font(egui::TextStyle::Monospace)
+                .layouter(&mut layouter)
                 .desired_rows(28)
                 .desired_width(f32::INFINITY),
             ControlSize::Sm,
@@ -3168,4 +3374,47 @@ fn current_date() -> NaiveDate {
 
 fn current_date_text() -> String {
     current_date().format("%Y-%m-%d").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xml_syntax_layout_job_preserves_input_text() {
+        let xml = r#"<?xml version="1.0"?>
+<!-- generated AIXM -->
+<aixm:name gml:id="id1">Zürich <![CDATA[plain < text]]></aixm:name>"#;
+
+        let job = xml_syntax_layout_job(xml, &Theme::dark());
+
+        assert_eq!(job.text, xml);
+        assert!(job.sections.len() > 8);
+    }
+
+    #[test]
+    fn xml_syntax_layout_job_colors_xml_tokens() {
+        let theme = Theme::dark();
+        let colors = XmlSyntaxColors::from_theme(&theme);
+        let job = xml_syntax_layout_job(
+            r#"<aixm:name gml:id="id1">Zürich</aixm:name><!-- done -->"#,
+            &theme,
+        );
+
+        assert!(has_colored_section(&job, "aixm:name", colors.element));
+        assert!(has_colored_section(&job, "gml:id", colors.attribute));
+        assert!(has_colored_section(&job, r#""id1""#, colors.value));
+        assert!(has_colored_section(&job, "Zürich", colors.text));
+        assert!(has_colored_section(&job, "<!-- done -->", colors.comment));
+    }
+
+    fn has_colored_section(
+        job: &egui::text::LayoutJob,
+        expected: &str,
+        color: egui::Color32,
+    ) -> bool {
+        job.sections.iter().any(|section| {
+            job.text[section.byte_range.clone()] == *expected && section.format.color == color
+        })
+    }
 }
