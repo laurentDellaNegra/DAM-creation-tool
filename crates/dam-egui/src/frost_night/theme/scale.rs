@@ -2,6 +2,8 @@
 
 use egui::{CornerRadius, FontId, Vec2};
 
+use super::typography;
+
 /// Spacing scale derived from Figma measurements.
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -83,9 +85,9 @@ impl ControlSize {
     /// Font for this control size.
     pub fn font(self) -> FontId {
         match self {
-            Self::Sm => FontId::proportional(11.0),
-            Self::Md => FontId::proportional(13.0),
-            Self::Lg => FontId::proportional(15.0),
+            Self::Sm => typography::proportional(11.0),
+            Self::Md => typography::proportional(13.0),
+            Self::Lg => typography::proportional(15.0),
         }
     }
 }

@@ -2,8 +2,8 @@
 
 use egui::{Color32, CornerRadius, Response, Sense, Ui, Vec2, WidgetText};
 
-use crate::frost_night::theme::Theme;
 use crate::frost_night::theme::mix;
+use crate::frost_night::theme::{Theme, typography};
 
 /// A themed checkbox with rounded square and accent checkmark.
 ///
@@ -37,7 +37,7 @@ fn checkbox_with_font(
 ) -> Response {
     let box_size = 22.0;
     let spacing = theme.spacing.xs + 2.0;
-    let font = egui::FontId::proportional(font_size);
+    let font = typography::proportional(font_size);
 
     let text = label
         .into()

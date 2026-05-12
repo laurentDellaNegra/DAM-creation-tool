@@ -17,7 +17,7 @@ use crate::frost_night::icons::{
     ICON_CIRCLE_CHECK, ICON_CIRCLE_X, ICON_CROSSHAIR, ICON_EYE, ICON_GLOBE, ICON_RAINBOW,
     ICON_ROTATE_CCW, ICON_SEND_HORIZONTAL, ICON_TRASH, ICON_X, icon_text,
 };
-use crate::frost_night::theme::mix;
+use crate::frost_night::theme::{mix, typography};
 use crate::frost_night::{
     ControlSize, ControlVariant, FrostUiExt, InstallThemeOptions, Theme, install_theme,
 };
@@ -233,6 +233,7 @@ fn configure_visuals(ctx: &egui::Context, theme: &Theme) {
     let mut style = (*ctx.global_style()).clone();
     style.spacing.item_spacing = egui::vec2(theme.spacing.sm, theme.spacing.sm);
     style.spacing.button_padding = ControlSize::Md.padding();
+    typography::apply_app_text_styles(&mut style);
     ctx.set_global_style(style);
 }
 
@@ -298,7 +299,7 @@ impl XmlSyntaxColors {
 
 fn xml_syntax_layout_job(text: &str, theme: &Theme) -> egui::text::LayoutJob {
     let colors = XmlSyntaxColors::from_theme(theme);
-    let font_id = egui::FontId::monospace(12.0);
+    let font_id = typography::monospace(12.0);
     let mut job = egui::text::LayoutJob::default();
     let mut i = 0;
 
@@ -462,7 +463,7 @@ fn colored_segmented(
     active_fills: &[egui::Color32],
     selected: &mut usize,
 ) -> egui::Response {
-    let font = egui::FontId::proportional(12.0);
+    let font = typography::proportional(12.0);
     let pad = egui::vec2(theme.spacing.lg, theme.spacing.xs + 2.0);
     let gap = theme.control_gap;
 
@@ -1827,7 +1828,7 @@ impl DamApp {
             ),
         };
 
-        ui.label(icon_text(icon, 16.0).color(color))
+        ui.label(icon_text(icon, typography::font_size(16.0)).color(color))
             .on_hover_text(tooltip);
     }
 
@@ -2518,7 +2519,12 @@ fn themed_icon_button(
     variant: ControlVariant,
 ) -> egui::Response {
     ui.add_enabled_ui(enabled, |ui| {
-        ui.frost_button(theme, icon_text(icon, 15.0), variant, ControlSize::Sm)
+        ui.frost_button(
+            theme,
+            icon_text(icon, typography::font_size(15.0)),
+            variant,
+            ControlSize::Sm,
+        )
     })
     .inner
     .on_hover_text(tooltip)
@@ -2531,9 +2537,11 @@ fn borderless_icon_button(
     tooltip: &str,
 ) -> egui::Response {
     ui.add(
-        egui::Button::new(icon_text(icon, 15.0).color(theme.palette.muted_foreground))
-            .frame(false)
-            .min_size(egui::Vec2::splat(24.0)),
+        egui::Button::new(
+            icon_text(icon, typography::font_size(15.0)).color(theme.palette.muted_foreground),
+        )
+        .frame(false)
+        .min_size(egui::Vec2::splat(24.0)),
     )
     .on_hover_text(tooltip)
 }

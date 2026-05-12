@@ -1,4 +1,5 @@
 use crate::form::{ClickTarget, ManualMapState, NextClickInfo};
+use crate::frost_night::theme::typography;
 use dam_core::{
     Coordinate, ManualGeometry, ManualMap, ManualMapAttributes, ManualMapCategory,
     ManualMapRendering, PreviewPath, StaticMapSymbol, StaticMapSymbolKind, TextNumberColor,
@@ -546,7 +547,7 @@ fn paint_text_number(
         position + egui::vec2(8.0, -8.0),
         egui::Align2::LEFT_BOTTOM,
         text,
-        egui::FontId::proportional(text_size(size)),
+        typography::proportional(text_size(size)),
         text_color(color),
     );
 }
@@ -560,7 +561,7 @@ fn paint_level_label(
     let position = project(projector, coordinate) + egui::vec2(10.0, 10.0);
     let galley = painter.layout_no_wrap(
         label.to_owned(),
-        egui::FontId::monospace(13.0),
+        typography::monospace(13.0),
         egui::Color32::WHITE,
     );
     let rect = egui::Rect::from_min_size(position, galley.size() + egui::vec2(10.0, 6.0));
@@ -644,7 +645,7 @@ fn paint_cursor_target_label(
     let position = cursor_pos + egui::vec2(14.0, -22.0);
     let galley = painter.layout_no_wrap(
         label.to_owned(),
-        egui::FontId::proportional(12.0),
+        typography::proportional(12.0),
         egui::Color32::WHITE,
     );
     let padding = egui::vec2(6.0, 3.0);
@@ -702,7 +703,7 @@ fn paint_cursor_readout(
     coordinate: Coordinate,
 ) {
     let label = format!("{:.5} - {:.5}", coordinate.lat, coordinate.lon);
-    let galley = painter.layout_no_wrap(label, egui::FontId::monospace(12.0), egui::Color32::WHITE);
+    let galley = painter.layout_no_wrap(label, typography::monospace(12.0), egui::Color32::WHITE);
     let padding = egui::vec2(8.0, 4.0);
     let size = galley.size() + padding * 2.0;
     let bg_rect = clamped_popup_rect(bounds, position, size);

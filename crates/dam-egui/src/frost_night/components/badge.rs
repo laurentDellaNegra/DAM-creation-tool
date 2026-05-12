@@ -2,7 +2,7 @@
 
 use egui::{Color32, CornerRadius, Ui};
 
-use crate::frost_night::theme::Theme;
+use crate::frost_night::theme::{Theme, typography};
 
 /// Badge visual variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,6 +50,10 @@ pub fn badge(ui: &mut Ui, theme: &Theme, label: &str, variant: BadgeVariant) {
         .corner_radius(cr)
         .inner_margin(egui::Margin::symmetric(6, 2))
         .show(ui, |ui| {
-            ui.label(egui::RichText::new(label).size(10.0).color(fg));
+            ui.label(
+                egui::RichText::new(label)
+                    .size(typography::font_size(10.0))
+                    .color(fg),
+            );
         });
 }

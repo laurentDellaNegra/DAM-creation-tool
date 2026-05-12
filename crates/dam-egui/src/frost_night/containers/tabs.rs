@@ -4,7 +4,7 @@ use std::hash::Hash;
 
 use egui::{Response, Sense, Stroke, Ui, Vec2};
 
-use crate::frost_night::theme::{Theme, mix};
+use crate::frost_night::theme::{Theme, mix, typography};
 
 type IconGalley = Option<(char, std::sync::Arc<egui::Galley>)>;
 type TabMetric = (IconGalley, std::sync::Arc<egui::Galley>, f32);
@@ -89,7 +89,7 @@ fn tabs_impl(
     let tab_padding_h = theme.spacing.md;
     let tab_gap = theme.spacing.xs;
     #[cfg(feature = "icons")]
-    let icon_font_size = 13.0;
+    let icon_font_size = typography::font_size(13.0);
 
     // Measure tab widths (icon + gap + text)
     let tab_metrics: Vec<TabMetric> = labels
@@ -122,7 +122,7 @@ fn tabs_impl(
             };
             let text_galley = ui.painter().layout_no_wrap(
                 label.to_string(),
-                egui::FontId::proportional(13.0),
+                typography::proportional(13.0),
                 theme.palette.foreground,
             );
             let icon_w = icon_galley
@@ -201,7 +201,7 @@ fn tabs_impl(
         // Text
         let text_galley = ui.painter().layout_no_wrap(
             labels[i].to_string(),
-            egui::FontId::proportional(13.0),
+            typography::proportional(13.0),
             text_color,
         );
         ui.painter().galley(

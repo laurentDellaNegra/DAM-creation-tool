@@ -6,7 +6,7 @@
 
 use egui::{Color32, CornerRadius, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
-use crate::frost_night::theme::{Theme, mix};
+use crate::frost_night::theme::{Theme, mix, typography};
 
 /// Persistent state for a draggable card.
 #[derive(Clone, Debug)]
@@ -156,7 +156,7 @@ pub fn drag_card(
         egui::pos2(card_rect.left() + padding, title_center_y),
         egui::Align2::LEFT_CENTER,
         title,
-        egui::FontId::proportional(13.0),
+        typography::proportional(13.0),
         theme.palette.foreground,
     );
 

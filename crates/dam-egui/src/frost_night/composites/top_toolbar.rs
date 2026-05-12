@@ -5,7 +5,7 @@ use std::hash::Hash;
 use egui::{CornerRadius, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 use crate::frost_night::icons::icon_font;
-use crate::frost_night::theme::Theme;
+use crate::frost_night::theme::{Theme, typography};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ToolbarAction<'a> {
@@ -40,9 +40,9 @@ pub fn top_toolbar_with_id(
     let pad_h = theme.spacing.sm;
     let section_gap = theme.spacing.sm;
     let button_height = 28.0;
-    let icon_size = 14.0;
+    let icon_size = typography::font_size(14.0);
     let icon_gap = theme.spacing.xs;
-    let label_font = egui::FontId::proportional(12.0);
+    let label_font = typography::proportional(12.0);
     let label_pad_h = theme.spacing.sm + 4.0;
     let sep_margin_v = theme.spacing.sm;
     let action_gap = theme.spacing.xs;

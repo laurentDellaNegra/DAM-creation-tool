@@ -4,7 +4,7 @@ use std::hash::Hash;
 
 use egui::{Response, Sense, Ui, Vec2};
 
-use crate::frost_night::theme::{Theme, mix};
+use crate::frost_night::theme::{Theme, mix, typography};
 
 /// Render an accordion group.
 ///
@@ -146,7 +146,7 @@ pub fn accordion_with_id(
                     );
                     let galley = ui.painter().layout_no_wrap(
                         title.to_string(),
-                        egui::FontId::proportional(13.0),
+                        typography::proportional(13.0),
                         title_color,
                     );
                     ui.painter().galley(

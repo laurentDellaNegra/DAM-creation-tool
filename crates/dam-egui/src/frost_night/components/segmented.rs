@@ -2,15 +2,15 @@
 
 use egui::{CornerRadius, Response, Sense, Ui, Vec2};
 
-use crate::frost_night::theme::Theme;
 use crate::frost_night::theme::mix;
+use crate::frost_night::theme::{Theme, typography};
 
 /// A horizontal segmented control. Returns the newly selected index if changed.
 ///
 /// Same outer border, gap, and inner radius as checkbox/toggle.
 /// Active segment has a navy-filled inset rect; inactive segments are transparent.
 pub fn segmented(ui: &mut Ui, theme: &Theme, labels: &[&str], selected: &mut usize) -> Response {
-    let font = egui::FontId::proportional(12.0);
+    let font = typography::proportional(12.0);
     let pad = Vec2::new(theme.spacing.lg, theme.spacing.xs + 2.0);
     let gap = theme.control_gap;
 
