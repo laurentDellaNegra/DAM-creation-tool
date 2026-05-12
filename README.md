@@ -3,8 +3,8 @@
 Rust + egui implementation of the DAM Creation Tool.
 
 The app targets both native desktop and web/WASM from one shared egui UI. It
-supports deterministic JSON export and a first-pass AIXM XML export generated
-from the core `DamCreation` model.
+supports AIXM XML preview, editing, download, and send payload generation from
+the core `DamCreation` model.
 
 See [docs/architecture.md](docs/architecture.md) for the crate boundaries and
 send/export data flow.
@@ -161,5 +161,7 @@ Catalog rules:
 - Map id comes from the filename stem, for example `50714.geojson` -> `50714`.
 - Map name comes from the top-level `name`.
 - Top-level `description` is used for search/detail text.
-- Static map JSON export includes only the map id and name, not GeoJSON
-  geometry.
+- AIXM export keeps predefined `mapId` authoritative and includes fallback
+  geometry/label data derived from the bundled GeoJSON where available.
+- GeoJSON point symbols are rendered in the map preview only; `A_SYMBOL_SYM31`
+  uses the para symbol and unknown symbols use a generic marker.

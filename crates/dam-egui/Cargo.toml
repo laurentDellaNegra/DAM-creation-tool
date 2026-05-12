@@ -19,7 +19,6 @@ geo.workspace = true
 js-sys.workspace = true
 log.workspace = true
 serde = { workspace = true, optional = true }
-serde_json.workspace = true
 walkers.workspace = true
 wasm-bindgen.workspace = true
 web-sys = { workspace = true, features = [

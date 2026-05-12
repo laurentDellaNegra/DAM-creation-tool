@@ -26,10 +26,14 @@ pub enum DamMap {
     Manual(ManualMap),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SelectedStaticMap {
     pub id: String,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_geometry: Option<Vec<crate::Coordinate>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_label_position: Option<crate::Coordinate>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

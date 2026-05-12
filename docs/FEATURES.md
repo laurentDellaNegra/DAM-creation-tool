@@ -2,16 +2,16 @@
 
 A Rust + egui application for creating Dynamic Airspace Maps (DAMs). One shared
 UI codebase compiles to a native desktop app and to a WASM web app via Trunk.
-The first version focuses on the creation workflow only: it produces a typed,
-validated domain model and a deterministic JSON export. AIXM/SKYVISU delivery
-and full DAM lifecycle management are deferred.
+The current version focuses on the creation workflow: it produces a typed,
+validated domain model and an AIXM XML payload. SKYVISU delivery and full DAM
+lifecycle management are deferred.
 
 ## Targets and Architecture
 
 - Native desktop launcher (`apps/native`) — `eframe` window, 1440×900 default.
 - Web/WASM launcher (`apps/web`) — Trunk-built canvas, mounts on `#dam-canvas`.
-- Shared domain crate `dam-core` — model, validation, catalog, deterministic
-  export. No UI dependencies.
+- Shared domain crate `dam-core` — model, validation, catalog, and AIXM export.
+  No UI dependencies.
 - Shared UI crate `dam-egui` — egui app state, form, map preview overlay.
 - Dark theme only.
 
@@ -19,7 +19,8 @@ and full DAM lifecycle management are deferred.
 
 A single screen split into:
 
-- Top toolbar with `Reset` and `Send` actions.
+- Top toolbar with `Send`, `Preview AIXM`, `Download AIXM`, and `Reset`
+  actions.
 - Resizable left form panel (420–760 px) with collapsible sections.
 - Central map preview panel (powered by `walkers`) that updates live.
 - Floating windows: Unit/Sector picker, date picker calendar, reset
@@ -151,6 +152,9 @@ Three independent segmented selectors:
   country-border GeoJSON overlay.
 - For predefined maps: renders the selected map’s GeoJSON paths
   (LineString / MultiLineString / Polygon / MultiPolygon) in accent color.
+  GeoJSON point symbols are also rendered on the map only: `A_SYMBOL_SYM31`
+  uses the same para glyph as manual para symbols, while unknown symbol codes
+  use a generic non-editable marker.
 - For manual maps: renders the in-progress geometry, including a ghost preview
   that follows the cursor while a coordinate or distance field is focused.
 - Optional level label (`low/high`) is drawn at the map’s label position or
@@ -161,12 +165,15 @@ Three independent segmented selectors:
 
 - **Reset** opens a confirmation window; on confirm, the form is rebuilt from
   defaults, validation state and status are cleared, and the preview re-centers.
-- **Download JSON** runs full validation, builds the typed `DamCreation` model,
-  serializes it to deterministic pretty JSON, and exports it locally.
 - **Download AIXM** runs the same validation path and exports the first-pass AIXM
-  XML payload locally.
-- **Send** builds the AIXM payload and then reports that no submission endpoint
-  is configured yet.
+  XML payload locally. If an edited AIXM draft exists, the draft XML is used
+  after a well-formedness check.
+- **Preview AIXM** opens a resizable XML preview/editor. The left form remains
+  the source of truth; XML edits are draft-only and never write back into the
+  form. Any AIXM-affecting form change discards the edited draft and regenerates
+  from the form. Search/filter text is UI-only and does not discard the draft.
+- **Send** builds the active AIXM payload, using the edited XML draft when one
+  exists, and then reports that no submission endpoint is configured yet.
 
 ## Validation
 
@@ -192,26 +199,22 @@ issues:
 Failed validation surfaces in a **Status** section under the form, listing
 field paths and human-readable messages, and blocks export.
 
-## Deterministic JSON Export
+## AIXM Export
 
-The export shape (`DamExport`) is stable and intentionally separate from the
-edit-time state:
+AIXM XML export is generated in `dam-core` from the same domain model:
 
-- Top-level: `version: 1`, `kind: "dam_creation"`, plus map, date range,
-  periods, `display_levels`, correction/buffer enums, distribution sectors, and
-  text.
-- Dates serialize as `YYYY-MM-DD`, times as `HH:MM`. No timezone metadata —
-  values are exported exactly as entered.
-- Predefined map exports only `id` and `name` (no GeoJSON geometry).
-- Manual map exports the geometry-specific shape, attributes (category,
-  rendering, lateral buffer NM), and label position. Polygon nodes preserve
-  point/arc structure with center+radius for arcs.
-- Levels export `{ value, unit }` with `unit` as `"FL"` or `"ft"` — no
-  normalized feet conversion is included.
-- Sectors export as a sorted list of stable string ids.
-- AIXM XML export is generated in `dam-core` from the same domain model. The
-  first-pass generator supports one activation period, static-map fallback
-  geometry, and manual polygon geometry without lateral buffer.
+- Dates and times are emitted from the active form state.
+- Predefined maps keep `mapId` authoritative for downstream processing.
+- Predefined map fallback AIXM includes one `geometryComponent`: the first
+  polygon/ring path parsed from the selected GeoJSON map, or the static
+  hardcoded fallback when the selected map has no polygon/ring geometry.
+- Predefined map fallback label position comes from the first GeoJSON point used
+  for `displayPositionLevelIndication`.
+- Manual polygon maps emit the drawn geometry and label position with
+  `mapId=0`.
+- Edited XML drafts must be well formed before `Send` or `Download AIXM`; the
+  preview panel disables those actions while XML is malformed, and global
+  toolbar actions show validation errors.
 
 ## Diagnostics
 
@@ -240,7 +243,7 @@ Carried over from the migration plan and not implemented:
 | Validation rules | `crates/dam-core/src/validation.rs` |
 | Map catalog parsing / bundling | `crates/dam-core/src/catalog.rs` |
 | Unit/sector reference data | `crates/dam-core/src/distribution.rs` |
-| Deterministic JSON export | `crates/dam-core/src/export.rs` |
+| AIXM export and payloads | `crates/dam-core/src/export/` |
 | App state, panels, windows | `crates/dam-egui/src/lib.rs` |
 | Form state, click-to-place flow | `crates/dam-egui/src/form.rs` |
 | Map overlay rendering | `crates/dam-egui/src/preview.rs` |

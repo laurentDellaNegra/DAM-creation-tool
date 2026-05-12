@@ -10,12 +10,12 @@ use crate::form::{
     ManualGeometryType, MapMode, PeriodRowState, PieCircleDraftState, PolygonDraftState,
     PolygonNodeDraft, StripDraftState, TextNumberDraftState, geometry_supports_buffer,
 };
-use crate::frost_night::components::{checkbox as frost_checkbox, segmented};
+use crate::frost_night::components::{BadgeVariant, badge, checkbox as frost_checkbox, segmented};
 use crate::frost_night::composites::{ToolbarAction, top_toolbar_with_id};
 use crate::frost_night::containers::{DragCardState, drag_card, tabs_with_id};
 use crate::frost_night::icons::{
-    ICON_BOOK_OPEN, ICON_CIRCLE_X, ICON_CROSSHAIR, ICON_EYE, ICON_GLOBE, ICON_PLANE, ICON_RAINBOW,
-    ICON_TRASH, icon_text,
+    ICON_CIRCLE_CHECK, ICON_CIRCLE_X, ICON_CROSSHAIR, ICON_EYE, ICON_GLOBE, ICON_RAINBOW,
+    ICON_ROTATE_CCW, ICON_SEND_HORIZONTAL, ICON_TRASH, ICON_X, icon_text,
 };
 use crate::frost_night::theme::mix;
 use crate::frost_night::{
@@ -26,11 +26,11 @@ use crate::preview::PreviewOverlay;
 use crate::submission::{SubmissionEndpoint, SubmissionResult, SubmissionStatus, submit_payload};
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime};
 use dam_core::{
-    AixmXmlSummary, AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, Level,
-    LevelUnit, MAX_PERIODS, MAX_POLYGON_POINTS, ManualMapCategory, ManualMapRendering, MapCatalog,
-    PreviewGeometry, StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday,
-    aixm_xml_well_formed, apply_aixm_xml_update, build_aixm_payload, build_json_payload,
-    bundled_catalog, summarize_aixm_xml, switzerland_default_preview, unit_groups,
+    AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, MAX_PERIODS,
+    MAX_POLYGON_POINTS, ManualMapCategory, ManualMapRendering, MapCatalog, PreviewGeometry,
+    StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday, aixm_xml_well_formed,
+    build_aixm_payload, build_aixm_payload_from_xml, bundled_catalog, switzerland_default_preview,
+    unit_groups,
 };
 use std::time::Duration as StdDuration;
 
@@ -70,7 +70,7 @@ const AIXM_PREVIEW_PANEL_WIDTH: f32 = 560.0;
 const AIXM_PREVIEW_PANEL_MIN_WIDTH: f32 = 320.0;
 const AIXM_PREVIEW_RESIZE_HANDLE_WIDTH: f32 = 8.0;
 const FLOATING_PANEL_MARGIN: f32 = 12.0;
-const AIXM_PREVIEW_FOOTER_HEIGHT: f32 = 48.0;
+const AIXM_PREVIEW_FOOTER_HEIGHT: f32 = 36.0;
 const TOAST_VISIBLE_SECONDS: f64 = 5.0;
 const TOAST_VALIDATION_SECONDS: f64 = 8.0;
 
@@ -97,12 +97,9 @@ struct AixmPreviewState {
     mode: AixmPreviewMode,
     width: f32,
     xml: String,
-    clean_xml: String,
+    generated_xml: String,
     form_signature: String,
-    summary_xml: String,
-    summary: Option<Result<AixmXmlSummary, Vec<ValidationIssue>>>,
     status: Option<SubmissionStatus>,
-    confirm_discard_close: bool,
 }
 
 impl Default for AixmPreviewState {
@@ -112,19 +109,20 @@ impl Default for AixmPreviewState {
             mode: AixmPreviewMode::ReadOnly,
             width: AIXM_PREVIEW_PANEL_WIDTH,
             xml: String::new(),
-            clean_xml: String::new(),
+            generated_xml: String::new(),
             form_signature: String::new(),
-            summary_xml: String::new(),
-            summary: None,
             status: None,
-            confirm_discard_close: false,
         }
     }
 }
 
 impl AixmPreviewState {
-    fn is_dirty(&self) -> bool {
-        self.mode == AixmPreviewMode::Editing && self.xml != self.clean_xml
+    fn has_edited_draft(&self) -> bool {
+        !self.xml.is_empty() && self.xml != self.generated_xml
+    }
+
+    fn has_content_or_status(&self) -> bool {
+        !self.xml.is_empty() || self.status.is_some()
     }
 }
 
@@ -213,12 +211,12 @@ impl eframe::App for DamApp {
                     .show_inside(ui, |ui| self.preview_panel(ui));
             });
 
+        self.sync_aixm_preview_after_form_changes();
         self.toolbar(ui.ctx());
         self.aixm_preview_overlay(ui.ctx());
         self.submission_status_toast(ui.ctx());
         self.distribution_window(ui.ctx());
         self.reset_confirmation(ui.ctx());
-        self.aixm_discard_close_confirmation(ui.ctx());
     }
 }
 
@@ -836,37 +834,26 @@ impl DamApp {
                     "dam-action-toolbar",
                     &[
                         ToolbarAction {
-                            icon: ICON_PLANE,
+                            icon: ICON_SEND_HORIZONTAL,
                             label: "Send",
-                            tooltip: "Send",
                             selected: false,
                             disabled: false,
                         },
                         ToolbarAction {
                             icon: ICON_EYE,
                             label: "Preview AIXM",
-                            tooltip: "Preview AIXM",
                             selected: self.aixm_preview.open,
                             disabled: false,
                         },
                         ToolbarAction {
                             icon: ICON_GLOBE,
                             label: "Download AIXM",
-                            tooltip: "Download AIXM",
                             selected: false,
                             disabled: false,
                         },
                         ToolbarAction {
-                            icon: ICON_BOOK_OPEN,
-                            label: "Download JSON",
-                            tooltip: "Download JSON",
-                            selected: false,
-                            disabled: false,
-                        },
-                        ToolbarAction {
-                            icon: ICON_CIRCLE_X,
+                            icon: ICON_ROTATE_CCW,
                             label: "Reset",
-                            tooltip: "Reset",
                             selected: false,
                             disabled: false,
                         },
@@ -877,8 +864,7 @@ impl DamApp {
                     Some(0) => self.send(),
                     Some(1) => self.toggle_aixm_preview(),
                     Some(2) => self.download_aixm(),
-                    Some(3) => self.download_json(),
-                    Some(4) => self.show_reset_confirm = true,
+                    Some(3) => self.show_reset_confirm = true,
                     _ => {}
                 }
             });
@@ -889,26 +875,42 @@ impl DamApp {
             self.request_close_aixm_preview();
         } else {
             self.aixm_preview.open = true;
-            self.refresh_aixm_preview_from_form();
+            if self.aixm_preview.has_content_or_status() {
+                self.sync_aixm_preview_after_form_changes();
+            } else {
+                self.refresh_aixm_preview_from_form(true);
+            }
         }
     }
 
     fn request_close_aixm_preview(&mut self) {
-        if self.aixm_preview.is_dirty() {
-            self.aixm_preview.confirm_discard_close = true;
-        } else {
-            self.aixm_preview.open = false;
-        }
+        self.aixm_preview.open = false;
     }
 
-    fn refresh_aixm_preview_from_form(&mut self) {
-        if !self.aixm_preview.open || self.aixm_preview.is_dirty() {
+    fn sync_aixm_preview_after_form_changes(&mut self) {
+        if !self.aixm_preview.has_content_or_status() {
             return;
         }
 
-        let form_signature = format!("{:?}", self.form);
-        if self.aixm_preview.form_signature == form_signature
-            && (!self.aixm_preview.clean_xml.is_empty() || self.aixm_preview.status.is_some())
+        let form_signature = self.aixm_form_signature();
+        if self.aixm_preview.form_signature == form_signature {
+            return;
+        }
+
+        let had_edited_draft = self.aixm_preview.has_edited_draft();
+        self.refresh_aixm_preview_from_form(true);
+        if had_edited_draft {
+            self.submission_status = SubmissionStatus::Ready {
+                message: "AIXM draft discarded because form changed.".to_owned(),
+            };
+        }
+    }
+
+    fn refresh_aixm_preview_from_form(&mut self, force: bool) {
+        let form_signature = self.aixm_form_signature();
+        if !force
+            && self.aixm_preview.form_signature == form_signature
+            && self.aixm_preview.has_content_or_status()
         {
             return;
         }
@@ -916,102 +918,47 @@ impl DamApp {
         match self.build_aixm_payload_from_form() {
             Ok(payload) => {
                 self.aixm_preview.xml = payload.body.clone();
-                self.aixm_preview.clean_xml = payload.body;
+                self.aixm_preview.generated_xml = payload.body;
                 self.aixm_preview.form_signature = form_signature;
                 self.aixm_preview.status = None;
-                self.invalidate_aixm_summary_cache();
+                self.aixm_preview.mode = AixmPreviewMode::ReadOnly;
             }
             Err(status) => {
                 self.aixm_preview.xml.clear();
-                self.aixm_preview.clean_xml.clear();
+                self.aixm_preview.generated_xml.clear();
                 self.aixm_preview.form_signature = form_signature;
                 self.aixm_preview.status = Some(status);
                 self.aixm_preview.mode = AixmPreviewMode::ReadOnly;
-                self.invalidate_aixm_summary_cache();
             }
         }
     }
 
-    fn invalidate_aixm_summary_cache(&mut self) {
-        self.aixm_preview.summary_xml.clear();
-        self.aixm_preview.summary = None;
-    }
-
-    fn cached_aixm_summary(&mut self) -> Option<Result<AixmXmlSummary, Vec<ValidationIssue>>> {
-        if self.aixm_preview.xml.trim().is_empty() {
-            return None;
-        }
-        if self.aixm_preview.summary_xml != self.aixm_preview.xml {
-            self.aixm_preview.summary =
-                Some(summarize_aixm_xml(&self.aixm_preview.xml).map_err(|error| error.issues));
-            self.aixm_preview.summary_xml = self.aixm_preview.xml.clone();
-        }
-        self.aixm_preview.summary.clone()
+    fn aixm_form_signature(&self) -> String {
+        self.form.aixm_signature(&self.catalog)
     }
 
     fn discard_aixm_preview_changes(&mut self) {
-        self.aixm_preview.xml = self.aixm_preview.clean_xml.clone();
+        self.refresh_aixm_preview_from_form(true);
         self.aixm_preview.mode = AixmPreviewMode::ReadOnly;
-        self.aixm_preview.status = None;
-        self.invalidate_aixm_summary_cache();
-        self.refresh_aixm_preview_from_form();
     }
 
-    fn save_aixm_preview_xml(&mut self) {
-        let base = match self.form.to_creation(&self.catalog) {
-            Ok(creation) => creation,
-            Err(issues) => {
-                self.aixm_preview.status = Some(SubmissionStatus::Invalid(issues.clone()));
-                self.submission_status = SubmissionStatus::Invalid(issues);
-                return;
+    fn active_aixm_payload(&mut self) -> Result<dam_core::SubmissionPayload, SubmissionStatus> {
+        self.sync_aixm_preview_after_form_changes();
+        let creation = self
+            .form
+            .to_creation(&self.catalog)
+            .map_err(SubmissionStatus::Invalid)?;
+
+        if self.aixm_preview.has_edited_draft() {
+            if let Err(error) = aixm_xml_well_formed(&self.aixm_preview.xml) {
+                return Err(SubmissionStatus::Invalid(error.issues));
             }
-        };
-
-        let candidate = match apply_aixm_xml_update(&base, &self.catalog, &self.aixm_preview.xml) {
-            Ok(candidate) => candidate,
-            Err(error) => {
-                self.aixm_preview.status = Some(SubmissionStatus::Invalid(error.issues.clone()));
-                self.submission_status = SubmissionStatus::Invalid(error.issues);
-                return;
-            }
-        };
-
-        let payload = match build_aixm_payload(&candidate) {
-            Ok(payload) => payload,
-            Err(error) => {
-                let status = status_from_export_error(error);
-                self.aixm_preview.status = Some(status.clone());
-                self.submission_status = status;
-                return;
-            }
-        };
-
-        self.form.apply_creation(&candidate, &self.catalog);
-        self.selected_period = self
-            .selected_period
-            .min(self.form.periods.len().saturating_sub(1));
-        if let Some(map) = self.form.selected_map(&self.catalog) {
-            center_map_on_static_map(&mut self.map_memory, map);
-        }
-        self.aixm_preview.xml = payload.body.clone();
-        self.aixm_preview.clean_xml = payload.body;
-        self.aixm_preview.form_signature = format!("{:?}", self.form);
-        self.aixm_preview.mode = AixmPreviewMode::ReadOnly;
-        self.aixm_preview.status = None;
-        self.invalidate_aixm_summary_cache();
-        self.submission_status = SubmissionStatus::Ready {
-            message: "AIXM preview saved to form.".to_owned(),
-        };
-    }
-
-    fn block_if_aixm_preview_dirty(&mut self, action: &str) -> bool {
-        if self.aixm_preview.is_dirty() {
-            self.submission_status = SubmissionStatus::Failed {
-                message: format!("Save or discard XML changes before {action}."),
-            };
-            true
+            Ok(build_aixm_payload_from_xml(
+                &creation,
+                self.aixm_preview.xml.clone(),
+            ))
         } else {
-            false
+            build_aixm_payload(&creation).map_err(status_from_export_error)
         }
     }
 
@@ -1030,11 +977,8 @@ impl DamApp {
             content_rect.top() + FLOATING_PANEL_MARGIN,
         );
         let size = egui::vec2(panel_width, panel_height);
-        let inner_spacing = self.frost_theme.spacing.md;
-        let inner_size = egui::vec2(
-            (size.x - inner_spacing * 2.0).max(0.0),
-            (size.y - inner_spacing * 2.0).max(0.0),
-        );
+        let panel_stroke = egui::Stroke::new(1.0, self.frost_theme.palette.border);
+        let panel_padding = self.frost_theme.spacing.md;
 
         egui::Area::new(egui::Id::new("aixm_preview_overlay"))
             .order(egui::Order::Foreground)
@@ -1042,16 +986,30 @@ impl DamApp {
             .show(ctx, |ui| {
                 ui.set_min_size(size);
                 ui.set_max_size(size);
-                egui::Frame::new()
-                    .fill(self.frost_theme.palette.background)
-                    .stroke(egui::Stroke::new(1.0, self.frost_theme.palette.border))
-                    .corner_radius(egui::CornerRadius::same(self.frost_theme.radius.lg))
-                    .inner_margin(egui::Margin::same(self.frost_theme.spacing.md as i8))
-                    .show(ui, |ui| {
-                        ui.set_min_size(inner_size);
-                        ui.set_max_size(inner_size);
-                        self.aixm_preview_panel(ui);
-                    });
+                let (panel_rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+                let panel_content_rect = panel_rect.shrink(panel_padding);
+                ui.set_clip_rect(panel_rect);
+
+                let radius = egui::CornerRadius::same(self.frost_theme.radius.lg);
+                ui.painter()
+                    .rect_filled(panel_rect, radius, self.frost_theme.palette.background);
+                ui.painter().rect_stroke(
+                    panel_rect,
+                    radius,
+                    panel_stroke,
+                    egui::StrokeKind::Inside,
+                );
+
+                let mut panel_ui = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt("aixm_preview_panel_content")
+                        .max_rect(panel_content_rect)
+                        .layout(egui::Layout::top_down(egui::Align::Min)),
+                );
+                panel_ui.set_clip_rect(panel_content_rect);
+                panel_ui.set_min_size(panel_content_rect.size());
+                panel_ui.set_max_size(panel_content_rect.size());
+                self.aixm_preview_panel(&mut panel_ui);
             });
 
         egui::Area::new(egui::Id::new("aixm_preview_resize_handle"))
@@ -1771,59 +1729,54 @@ impl DamApp {
     }
 
     fn aixm_preview_panel(&mut self, ui: &mut egui::Ui) {
-        self.refresh_aixm_preview_from_form();
+        self.refresh_aixm_preview_from_form(false);
 
         let mut edit_clicked = false;
-        let mut save_clicked = false;
         let mut discard_clicked = false;
+        let mut download_clicked = false;
         let mut send_clicked = false;
+        let section_gap = self.frost_theme.spacing.md;
+
+        ui.spacing_mut().item_spacing.y = 0.0;
 
         self.aixm_preview_header(ui);
-        ui.separator();
-        ui.add_space(self.frost_theme.spacing.sm);
+        ui.add_space(section_gap);
 
-        let show_editor = self.aixm_preview_fixed_content(ui);
-        if show_editor {
-            ui.add_space(self.frost_theme.spacing.sm);
-        }
+        let footer_block_height = section_gap + AIXM_PREVIEW_FOOTER_HEIGHT;
+        let editor_height = (ui.available_height() - footer_block_height).max(0.0);
+        let editor_size = egui::vec2(ui.available_width(), editor_height);
+        let (editor_rect, _) = ui.allocate_exact_size(editor_size, egui::Sense::hover());
+        let mut editor_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt("aixm_preview_editor_region")
+                .max_rect(editor_rect)
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+        );
+        editor_ui.set_clip_rect(editor_rect);
+        editor_ui.spacing_mut().item_spacing.y = self.frost_theme.spacing.sm;
+        egui::ScrollArea::vertical()
+            .id_salt("aixm_preview_editor_scroll")
+            .max_height(editor_height)
+            .auto_shrink([false, false])
+            .show(&mut editor_ui, |ui| self.aixm_preview_content(ui));
 
-        let footer_block_height =
-            AIXM_PREVIEW_FOOTER_HEIGHT + self.frost_theme.spacing.xs * 2.0 + 1.0;
-        let editor_height = (ui.available_height() - footer_block_height).max(72.0);
-        if show_editor {
-            ui.allocate_ui_with_layout(
-                egui::vec2(ui.available_width(), editor_height),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    egui::ScrollArea::vertical()
-                        .id_salt("aixm_preview_editor_scroll")
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| self.aixm_preview_editor(ui));
-                },
-            );
-        } else {
-            ui.allocate_space(egui::vec2(ui.available_width(), editor_height));
-        }
-
-        ui.add_space(self.frost_theme.spacing.xs);
-        ui.separator();
-        ui.add_space(self.frost_theme.spacing.xs);
+        ui.add_space(section_gap);
         self.aixm_preview_footer(
             ui,
             &mut edit_clicked,
-            &mut save_clicked,
             &mut discard_clicked,
+            &mut download_clicked,
             &mut send_clicked,
         );
 
         if edit_clicked {
             self.aixm_preview.mode = AixmPreviewMode::Editing;
         }
-        if save_clicked {
-            self.save_aixm_preview_xml();
-        }
         if discard_clicked {
             self.discard_aixm_preview_changes();
+        }
+        if download_clicked {
+            self.download_aixm();
         }
         if send_clicked {
             self.send();
@@ -1833,14 +1786,22 @@ impl DamApp {
     fn aixm_preview_header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             section_heading_inline(ui, &self.frost_theme, "AIXM Preview");
+            self.aixm_xml_status_icon(ui);
+            if self.aixm_preview.has_edited_draft() {
+                ui.scope(|ui| {
+                    badge(
+                        ui,
+                        &self.frost_theme,
+                        "Draft differs from form",
+                        BadgeVariant::Accent,
+                    );
+                })
+                .response
+                .on_hover_text("AIXM draft differs from form. Send and Download AIXM will use the edited XML draft until the form changes or the draft is discarded.");
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if borderless_icon_button(
-                    ui,
-                    &self.frost_theme,
-                    ICON_CIRCLE_X,
-                    "Close AIXM preview",
-                )
-                .clicked()
+                if borderless_icon_button(ui, &self.frost_theme, ICON_X, "Close AIXM preview")
+                    .clicked()
                 {
                     self.request_close_aixm_preview();
                 }
@@ -1848,42 +1809,40 @@ impl DamApp {
         });
     }
 
-    fn aixm_preview_fixed_content(&mut self, ui: &mut egui::Ui) -> bool {
+    fn aixm_xml_status_icon(&self, ui: &mut egui::Ui) {
+        if self.aixm_preview.xml.trim().is_empty() {
+            return;
+        }
+
+        let (icon, color, tooltip) = match aixm_xml_well_formed(&self.aixm_preview.xml) {
+            Ok(()) => (
+                ICON_CIRCLE_CHECK,
+                egui::Color32::from_rgb(72, 210, 120),
+                "XML is well formed.\nSend and Download AIXM can use this payload.".to_owned(),
+            ),
+            Err(error) => (
+                ICON_CIRCLE_X,
+                self.frost_theme.palette.destructive,
+                format!("XML is not well formed.\n{}", issues_tooltip(&error.issues)),
+            ),
+        };
+
+        ui.label(icon_text(icon, 16.0).color(color))
+            .on_hover_text(tooltip);
+    }
+
+    fn aixm_preview_content(&mut self, ui: &mut egui::Ui) {
         if let Some(status) = self.aixm_preview.status.clone() {
             render_aixm_preview_status(ui, &self.frost_theme, &status);
-            return false;
+            return;
         }
 
         if self.aixm_preview.xml.trim().is_empty() {
             ui.label("No AIXM payload is available.");
-            return false;
+            return;
         }
 
-        let summary = self.cached_aixm_summary();
-        match &summary {
-            Some(Ok(summary)) => render_aixm_summary(ui, &self.frost_theme, summary),
-            Some(Err(issues)) => {
-                ui.colored_label(
-                    self.frost_theme.palette.destructive,
-                    "AIXM summary is unavailable.",
-                );
-                render_validation_issues(ui, &self.frost_theme, issues);
-            }
-            None => {}
-        }
-
-        if self.aixm_preview.mode == AixmPreviewMode::Editing {
-            match aixm_xml_well_formed(&self.aixm_preview.xml) {
-                Ok(()) => {
-                    ui.colored_label(egui::Color32::LIGHT_GREEN, "XML is well formed.");
-                }
-                Err(error) => {
-                    render_validation_issues(ui, &self.frost_theme, &error.issues);
-                }
-            }
-        }
-
-        true
+        self.aixm_preview_editor(ui);
     }
 
     fn aixm_preview_editor(&mut self, ui: &mut egui::Ui) {
@@ -1912,48 +1871,75 @@ impl DamApp {
         &mut self,
         ui: &mut egui::Ui,
         edit_clicked: &mut bool,
-        save_clicked: &mut bool,
         discard_clicked: &mut bool,
+        download_clicked: &mut bool,
         send_clicked: &mut bool,
     ) {
         let editable = self.aixm_preview.mode == AixmPreviewMode::Editing;
         let can_edit =
             self.aixm_preview.status.is_none() && !self.aixm_preview.xml.trim().is_empty();
-        ui.allocate_ui_with_layout(
-            egui::vec2(
-                ui.available_width(),
-                AIXM_PREVIEW_FOOTER_HEIGHT - self.frost_theme.spacing.xs,
-            ),
-            egui::Layout::left_to_right(egui::Align::Center),
-            |ui| {
-                if editable {
-                    if ui
-                        .frost_button(
+        let can_submit = can_edit && aixm_xml_well_formed(&self.aixm_preview.xml).is_ok();
+        let footer_size = egui::vec2(ui.available_width(), AIXM_PREVIEW_FOOTER_HEIGHT);
+        let (footer_rect, _) = ui.allocate_exact_size(footer_size, egui::Sense::hover());
+        let mut footer_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt("aixm_preview_footer")
+                .max_rect(footer_rect)
+                .layout(egui::Layout::left_to_right(egui::Align::Center)),
+        );
+        footer_ui.set_clip_rect(footer_rect);
+        footer_ui.set_min_size(footer_rect.size());
+        footer_ui.set_max_size(footer_rect.size());
+
+        {
+            let ui = &mut footer_ui;
+            if editable {
+                if ui
+                    .frost_button(
+                        &self.frost_theme,
+                        "Discard XML changes",
+                        ControlVariant::Outline,
+                        ControlSize::Md,
+                    )
+                    .clicked()
+                {
+                    *discard_clicked = true;
+                }
+            } else if ui
+                .add_enabled_ui(can_edit, |ui| {
+                    ui.frost_button(
+                        &self.frost_theme,
+                        "Edit XML",
+                        ControlVariant::Secondary,
+                        ControlSize::Md,
+                    )
+                })
+                .inner
+                .clicked()
+            {
+                *edit_clicked = true;
+            }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .add_enabled_ui(can_submit, |ui| {
+                        ui.frost_button(
                             &self.frost_theme,
-                            "Save XML",
+                            "Send",
                             ControlVariant::Primary,
                             ControlSize::Md,
                         )
-                        .clicked()
-                    {
-                        *save_clicked = true;
-                    }
-                    if ui
-                        .frost_button(
-                            &self.frost_theme,
-                            "Discard XML changes",
-                            ControlVariant::Outline,
-                            ControlSize::Md,
-                        )
-                        .clicked()
-                    {
-                        *discard_clicked = true;
-                    }
-                } else if ui
-                    .add_enabled_ui(can_edit, |ui| {
+                    })
+                    .inner
+                    .clicked()
+                {
+                    *send_clicked = true;
+                }
+                if ui
+                    .add_enabled_ui(can_submit, |ui| {
                         ui.frost_button(
                             &self.frost_theme,
-                            "Edit XML",
+                            "Download AIXM",
                             ControlVariant::Secondary,
                             ControlSize::Md,
                         )
@@ -1961,24 +1947,10 @@ impl DamApp {
                     .inner
                     .clicked()
                 {
-                    *edit_clicked = true;
+                    *download_clicked = true;
                 }
-
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .frost_button(
-                            &self.frost_theme,
-                            "Send",
-                            ControlVariant::Primary,
-                            ControlSize::Md,
-                        )
-                        .clicked()
-                    {
-                        *send_clicked = true;
-                    }
-                });
-            },
-        );
+            });
+        }
     }
 
     fn preview_panel(&mut self, ui: &mut egui::Ui) {
@@ -1995,6 +1967,9 @@ impl DamApp {
 
         let selected_paths = selected_map
             .map(|map| map.preview.paths.clone())
+            .unwrap_or_default();
+        let selected_symbols = selected_map
+            .map(|map| map.symbols.clone())
             .unwrap_or_default();
         let center = selected_map
             .and_then(|map| map.preview.bbox)
@@ -2036,6 +2011,7 @@ impl DamApp {
         let overlay = PreviewOverlay::new(
             self.default_preview.paths.clone(),
             selected_paths,
+            selected_symbols,
             manual_map,
             level_label,
             next_click,
@@ -2249,63 +2225,9 @@ impl DamApp {
         self.show_reset_confirm = open;
     }
 
-    fn aixm_discard_close_confirmation(&mut self, ctx: &egui::Context) {
-        if !self.aixm_preview.confirm_discard_close {
-            return;
-        }
-
-        let mut open = self.aixm_preview.confirm_discard_close;
-        let mut discard = false;
-        let mut keep_editing = false;
-        egui::Window::new("Discard XML changes?")
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .show(ctx, |ui| {
-                ui.label("Close the AIXM preview and discard unsaved XML edits?");
-                ui.horizontal(|ui| {
-                    if ui
-                        .frost_button(
-                            &self.frost_theme,
-                            "Discard and close",
-                            ControlVariant::Destructive,
-                            ControlSize::Md,
-                        )
-                        .clicked()
-                    {
-                        discard = true;
-                    }
-                    if ui
-                        .frost_button(
-                            &self.frost_theme,
-                            "Keep editing",
-                            ControlVariant::Outline,
-                            ControlSize::Md,
-                        )
-                        .clicked()
-                    {
-                        keep_editing = true;
-                    }
-                });
-            });
-
-        if discard {
-            self.discard_aixm_preview_changes();
-            self.aixm_preview.open = false;
-            open = false;
-        }
-        if keep_editing {
-            open = false;
-        }
-        self.aixm_preview.confirm_discard_close = open;
-    }
-
     fn send(&mut self) {
-        if self.block_if_aixm_preview_dirty("sending") {
-            return;
-        }
         self.submission_status = SubmissionStatus::Building;
-        let payload = match self.build_aixm_payload_from_form() {
+        let payload = match self.active_aixm_payload() {
             Ok(payload) => payload,
             Err(status) => {
                 self.submission_status = status;
@@ -2321,24 +2243,8 @@ impl DamApp {
     }
 
     fn download_aixm(&mut self) {
-        if self.block_if_aixm_preview_dirty("downloading AIXM") {
-            return;
-        }
         self.submission_status = SubmissionStatus::Building;
-        let payload = match self.build_aixm_payload_from_form() {
-            Ok(payload) => payload,
-            Err(status) => {
-                self.submission_status = status;
-                return;
-            }
-        };
-
-        self.download_payload(payload);
-    }
-
-    fn download_json(&mut self) {
-        self.submission_status = SubmissionStatus::Building;
-        let payload = match self.build_json_payload_from_form() {
+        let payload = match self.active_aixm_payload() {
             Ok(payload) => payload,
             Err(status) => {
                 self.submission_status = status;
@@ -2370,17 +2276,6 @@ impl DamApp {
 
         build_aixm_payload(&creation).map_err(status_from_export_error)
     }
-
-    fn build_json_payload_from_form(
-        &self,
-    ) -> Result<dam_core::SubmissionPayload, SubmissionStatus> {
-        let creation = self
-            .form
-            .to_creation(&self.catalog)
-            .map_err(SubmissionStatus::Invalid)?;
-
-        build_json_payload(&creation).map_err(status_from_export_error)
-    }
 }
 
 fn render_validation_issues(ui: &mut egui::Ui, theme: &Theme, issues: &[ValidationIssue]) {
@@ -2392,6 +2287,18 @@ fn render_validation_issues(ui: &mut egui::Ui, theme: &Theme, issues: &[Validati
     for issue in issues {
         ui.label(format!("{}: {}", issue.field, issue.message));
     }
+}
+
+fn issues_tooltip(issues: &[ValidationIssue]) -> String {
+    if issues.is_empty() {
+        return "No details available.".to_owned();
+    }
+
+    issues
+        .iter()
+        .map(|issue| format!("{}: {}", issue.field, issue.message))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn submission_status_key(status: &SubmissionStatus) -> String {
@@ -2436,7 +2343,7 @@ fn render_submission_status_toast(
     ui.horizontal(|ui| {
         ui.colored_label(title_color, egui::RichText::new(title).strong());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if borderless_icon_button(ui, theme, ICON_CIRCLE_X, "Dismiss status").clicked() {
+            if borderless_icon_button(ui, theme, ICON_X, "Dismiss status").clicked() {
                 dismiss = true;
             }
         });
@@ -2502,78 +2409,12 @@ fn render_aixm_preview_status(ui: &mut egui::Ui, theme: &Theme, status: &Submiss
     }
 }
 
-fn render_aixm_summary(ui: &mut egui::Ui, theme: &Theme, summary: &AixmXmlSummary) {
-    egui::Frame::new()
-        .fill(theme.palette.surface_blur)
-        .stroke(egui::Stroke::new(1.0, theme.palette.border))
-        .corner_radius(egui::CornerRadius::same(theme.radius.md))
-        .inner_margin(egui::Margin::same(theme.spacing.sm as i8))
-        .show(ui, |ui| {
-            egui::Grid::new("aixm_preview_summary")
-                .num_columns(2)
-                .spacing([12.0, 6.0])
-                .show(ui, |ui| {
-                    ui.label("Map");
-                    ui.label(format!("{} - {}", summary.map_id, summary.map_name));
-                    ui.end_row();
-                    ui.label("Validity");
-                    ui.label(format!(
-                        "{} to {}",
-                        summary.start_date.format("%Y-%m-%d"),
-                        summary.end_date.format("%Y-%m-%d")
-                    ));
-                    ui.end_row();
-                    ui.label("Time");
-                    ui.label(format!(
-                        "{} to {}",
-                        summary.start_time.format("%H:%M"),
-                        summary.end_time.format("%H:%M")
-                    ));
-                    ui.end_row();
-                    ui.label("Levels");
-                    ui.label(format!(
-                        "{} / {}",
-                        format_summary_level(summary.lower_level),
-                        format_summary_level(summary.upper_level)
-                    ));
-                    ui.end_row();
-                    ui.label("Display");
-                    ui.label(format!(
-                        "levels={}, begin={}, end={}",
-                        yes_no_label(summary.display_levels),
-                        yes_no_label(summary.display_begin_time),
-                        yes_no_label(summary.display_end_time)
-                    ));
-                    ui.end_row();
-                    ui.label("Geometry");
-                    ui.label(format!(
-                        "{} point(s), label {:.6} {:.6}",
-                        summary.geometry_points,
-                        summary.label_position.lon,
-                        summary.label_position.lat
-                    ));
-                    ui.end_row();
-                });
-        });
-}
-
 fn section_heading_inline(ui: &mut egui::Ui, theme: &Theme, title: &str) {
     let rect = ui
         .allocate_exact_size(egui::vec2(3.0, 18.0), egui::Sense::hover())
         .0;
     ui.painter().rect_filled(rect, 1.5, theme.palette.ring);
     ui.heading(egui::RichText::new(title).color(theme.palette.foreground));
-}
-
-fn format_summary_level(level: Level) -> String {
-    match level.unit {
-        LevelUnit::FlightLevel => format!("FL{:03}", level.value),
-        LevelUnit::Feet => format!("{} ft", level.value),
-    }
-}
-
-fn yes_no_label(value: bool) -> &'static str {
-    if value { "YES" } else { "NO" }
 }
 
 fn clamp_aixm_panel_width(requested_width: f32, content_width: f32) -> f32 {
@@ -3436,6 +3277,33 @@ mod tests {
         assert!(has_colored_section(&job, "<!-- done -->", colors.comment));
     }
 
+    #[test]
+    fn edited_aixm_draft_does_not_mutate_form_signature() {
+        let catalog = test_catalog();
+        let mut form = DamFormState::new(&catalog);
+        form.selected_map_id = Some("10001".to_owned());
+        let before = form.aixm_signature(&catalog);
+
+        let mut draft = AixmPreviewState::default();
+        draft.generated_xml = "<root/>".to_owned();
+        draft.xml = "<root><edited/></root>".to_owned();
+
+        assert!(draft.has_edited_draft());
+        assert_eq!(before, form.aixm_signature(&catalog));
+    }
+
+    #[test]
+    fn malformed_edited_aixm_draft_fails_well_formed_gate() {
+        let mut draft = AixmPreviewState::default();
+        draft.generated_xml = "<root/>".to_owned();
+        draft.xml = "<root>".to_owned();
+
+        let error = aixm_xml_well_formed(&draft.xml).unwrap_err();
+
+        assert!(draft.has_edited_draft());
+        assert_eq!(error.issues[0].field, "aixm.xml");
+    }
+
     fn has_colored_section(
         job: &egui::text::LayoutJob,
         expected: &str,
@@ -3444,5 +3312,18 @@ mod tests {
         job.sections.iter().any(|section| {
             job.text[section.byte_range.clone()] == *expected && section.format.color == color
         })
+    }
+
+    fn test_catalog() -> MapCatalog {
+        let source = r##"{
+          "type": "FeatureCollection",
+          "name": "TEST",
+          "features": [{
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [8.0, 47.0]},
+            "properties": {"remarks": "LEVEL/ll=000/ul=065"}
+          }]
+        }"##;
+        MapCatalog::from_entries([("10001.geojson".to_owned(), source.to_owned())])
     }
 }

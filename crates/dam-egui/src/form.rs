@@ -2,7 +2,7 @@ use crate::{current_date_text, parse_date, parse_level, parse_time};
 use chrono::NaiveDate;
 use dam_core::{
     AltitudeCorrection, BufferFilter, Coordinate, DamCreation, DamMap, DateRange,
-    DistributionSelection, Level, LevelUnit, MAX_POLYGON_POINTS, ManualGeometry, ManualMap,
+    DistributionSelection, LevelUnit, MAX_POLYGON_POINTS, ManualGeometry, ManualMap,
     ManualMapAttributes, ManualMapCategory, ManualMapRendering, MapCatalog, MapDefaults, Period,
     PolygonNode, SelectedStaticMap, StaticMap, TextInfo, TextNumberColor, TextNumberSize,
     ValidationIssue, Weekday, default_distribution,
@@ -126,74 +126,6 @@ impl Default for ManualMapState {
 }
 
 impl ManualMapState {
-    fn apply_manual_map(&mut self, manual: &ManualMap) {
-        self.name = manual.name.clone();
-        self.attributes.category = manual.attributes.category;
-        self.attributes.rendering = manual.attributes.rendering;
-        self.attributes.lateral_buffer_nm = format_nm(manual.attributes.lateral_buffer_nm);
-
-        match &manual.geometry {
-            ManualGeometry::Polygon { nodes } => {
-                self.geometry_type = ManualGeometryType::Polygon;
-                self.polygon.nodes = nodes
-                    .iter()
-                    .map(|node| match node {
-                        PolygonNode::Point { coordinate } => PolygonNodeDraft::Point(
-                            CoordinateFieldState::from_coordinate(*coordinate),
-                        ),
-                        PolygonNode::Arc { center, radius_nm } => {
-                            PolygonNodeDraft::Arc(ArcDraftState {
-                                center: CoordinateFieldState::from_coordinate(*center),
-                                radius_nm: format_nm(*radius_nm),
-                            })
-                        }
-                    })
-                    .collect();
-                self.polygon.label = coordinate_field_from_option(manual.label_position);
-            }
-            ManualGeometry::ParaSymbol { point } => {
-                self.geometry_type = ManualGeometryType::ParaSymbol;
-                self.para_symbol.point = coordinate_field_from_option(*point);
-            }
-            ManualGeometry::TextNumber {
-                point,
-                text,
-                color,
-                size,
-            } => {
-                self.geometry_type = ManualGeometryType::TextNumber;
-                self.text_number.point = coordinate_field_from_option(*point);
-                self.text_number.text = text.clone();
-                self.text_number.color = *color;
-                self.text_number.size = *size;
-            }
-            ManualGeometry::PieCircle {
-                center,
-                radius_nm,
-                first_angle_deg,
-                last_angle_deg,
-            } => {
-                self.geometry_type = ManualGeometryType::PieCircle;
-                self.pie_circle.center = coordinate_field_from_option(*center);
-                self.pie_circle.radius_nm = radius_nm.map(format_nm).unwrap_or_default();
-                self.pie_circle.first_angle_deg = format_nm(*first_angle_deg);
-                self.pie_circle.last_angle_deg = format_nm(*last_angle_deg);
-                self.pie_circle.label = coordinate_field_from_option(manual.label_position);
-            }
-            ManualGeometry::Strip {
-                point1,
-                point2,
-                width_nm,
-            } => {
-                self.geometry_type = ManualGeometryType::Strip;
-                self.strip.point1 = coordinate_field_from_option(*point1);
-                self.strip.point2 = coordinate_field_from_option(*point2);
-                self.strip.width_nm = width_nm.map(format_nm).unwrap_or_default();
-                self.strip.label = coordinate_field_from_option(manual.label_position);
-            }
-        }
-    }
-
     pub fn to_manual_map(&self, issues: &mut Vec<ValidationIssue>) -> ManualMap {
         let attributes = self.attributes.to_attributes(self.geometry_type, issues);
         let geometry = match self.geometry_type {
@@ -745,40 +677,6 @@ impl DamFormState {
         state
     }
 
-    pub fn apply_creation(&mut self, creation: &DamCreation, _catalog: &MapCatalog) {
-        match &creation.map {
-            DamMap::Predefined(selected) => {
-                self.map_mode = MapMode::Predefined;
-                self.selected_map_id = Some(selected.id.clone());
-                self.map_search.clear();
-            }
-            DamMap::Manual(manual) => {
-                self.map_mode = MapMode::Manual;
-                self.manual.apply_manual_map(manual);
-            }
-        }
-
-        self.start_date = creation.date_range.start.format("%Y-%m-%d").to_string();
-        self.end_date = creation.date_range.end.format("%Y-%m-%d").to_string();
-        self.active_weekdays = creation.date_range.active_weekdays.clone();
-        self.possible_weekdays = creation.date_range.possible_weekdays();
-        self.periods = creation
-            .periods
-            .iter()
-            .map(period_row_from_period)
-            .collect();
-        if self.periods.is_empty() {
-            self.periods.push(PeriodRowState::default());
-        }
-        self.altitude_correction = creation.altitude_correction;
-        self.upper_buffer = creation.upper_buffer;
-        self.lower_buffer = creation.lower_buffer;
-        self.distribution = creation.distribution.clone();
-        self.text = creation.text.value.clone();
-        self.display_text = creation.text.display;
-        self.display_levels = creation.display_levels;
-    }
-
     pub fn selected_map<'a>(&self, catalog: &'a MapCatalog) -> Option<&'a StaticMap> {
         catalog.selected(self.selected_map_id.as_deref()?)
     }
@@ -878,6 +776,8 @@ impl DamFormState {
                     Some(map) => SelectedStaticMap {
                         id: map.id.clone(),
                         name: map.name.clone(),
+                        fallback_geometry: map.aixm_fallback_geometry.clone(),
+                        fallback_label_position: map.defaults.label_coordinate,
                     },
                     None => {
                         issues.push(ValidationIssue {
@@ -887,6 +787,8 @@ impl DamFormState {
                         SelectedStaticMap {
                             id: String::new(),
                             name: String::new(),
+                            fallback_geometry: None,
+                            fallback_label_position: None,
                         }
                     }
                 };
@@ -948,6 +850,12 @@ impl DamFormState {
                 display: self.display_text,
             },
         })
+    }
+
+    pub fn aixm_signature(&self, _catalog: &MapCatalog) -> String {
+        let mut signature_state = self.clone();
+        signature_state.map_search.clear();
+        format!("{signature_state:?}")
     }
 }
 
@@ -1034,33 +942,6 @@ fn format_nm(value: f64) -> String {
         format!("{value:.0}")
     } else {
         format!("{value:.2}")
-    }
-}
-
-fn coordinate_field_from_option(coordinate: Option<Coordinate>) -> CoordinateFieldState {
-    coordinate
-        .map(CoordinateFieldState::from_coordinate)
-        .unwrap_or_default()
-}
-
-fn period_row_from_period(period: &Period) -> PeriodRowState {
-    PeriodRowState {
-        start_indication: period.start_indication,
-        start_time: period.start_time.format("%H:%M").to_string(),
-        end_indication: period.end_indication,
-        end_time: period.end_time.format("%H:%M").to_string(),
-        lower: level_field_from_level(period.lower),
-        upper: level_field_from_level(period.upper),
-    }
-}
-
-fn level_field_from_level(level: Level) -> LevelFieldState {
-    LevelFieldState {
-        value: match level.unit {
-            LevelUnit::FlightLevel => format!("{:03}", level.value),
-            LevelUnit::Feet => level.value.to_string(),
-        },
-        explicit_unit: level.unit,
     }
 }
 
@@ -1168,6 +1049,31 @@ impl LevelFieldState {
 mod tests {
     use super::*;
 
+    fn signature_catalog() -> MapCatalog {
+        let source = r##"{
+          "type": "FeatureCollection",
+          "name": "FIRST",
+          "features": [{
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [8.0, 47.0]},
+            "properties": {"remarks": "LEVEL/ll=000/ul=065"}
+          }]
+        }"##;
+        let other = r##"{
+          "type": "FeatureCollection",
+          "name": "SECOND",
+          "features": [{
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [8.5, 47.5]},
+            "properties": {"remarks": "LEVEL/ll=000/ul=065"}
+          }]
+        }"##;
+        MapCatalog::from_entries([
+            ("10001.geojson".to_owned(), source.to_owned()),
+            ("10002.geojson".to_owned(), other.to_owned()),
+        ])
+    }
+
     #[test]
     fn four_digit_levels_are_forced_to_feet_without_losing_explicit_unit() {
         let mut field = LevelFieldState {
@@ -1182,5 +1088,31 @@ mod tests {
 
         field.value = "450".to_owned();
         assert_eq!(field.effective_unit(), LevelUnit::FlightLevel);
+    }
+
+    #[test]
+    fn aixm_signature_ignores_map_search_text() {
+        let catalog = signature_catalog();
+        let mut form = DamFormState::new(&catalog);
+        form.selected_map_id = Some("10001".to_owned());
+
+        let before = form.aixm_signature(&catalog);
+        form.map_search = "sec".to_owned();
+        let after = form.aixm_signature(&catalog);
+
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn aixm_signature_changes_when_selected_map_changes() {
+        let catalog = signature_catalog();
+        let mut form = DamFormState::new(&catalog);
+        form.selected_map_id = Some("10001".to_owned());
+
+        let before = form.aixm_signature(&catalog);
+        form.selected_map_id = Some("10002".to_owned());
+        let after = form.aixm_signature(&catalog);
+
+        assert_ne!(before, after);
     }
 }

@@ -870,7 +870,6 @@ dependencies = [
  "js-sys",
  "log",
  "serde",
- "serde_json",
  "walkers",
  "wasm-bindgen",
  "web-sys",

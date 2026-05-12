@@ -18,18 +18,23 @@ When the user sends or exports the form:
 
 1. `DamFormState` is parsed into `DamCreation`.
 2. `dam-core` validates the `DamCreation`.
-3. `dam-core` converts it into the target export format, currently JSON or AIXM
-   XML.
+3. `dam-core` converts it into AIXM XML.
 4. `dam-egui` downloads or submits the generated payload.
 
-The UI must not generate AIXM directly.
+The UI must not generate AIXM directly. If the AIXM preview has an active edited
+XML draft, `dam-egui` validates that the draft is well formed and packages it as
+the active submission/download payload without mutating the form state.
 
 ## AIXM Export
 
 AIXM XML generation lives in `dam-core::export::aixm`. The current generator is
 intentionally small and mirrors the existing TypeScript DAM builder shape:
 
-- static maps use the selected `mapId` and the shared fallback geometry;
+- predefined maps use the selected `mapId`;
+- predefined map fallback geometry uses the first polygon/ring parsed from the
+  selected GeoJSON map, falling back to the static hardcoded geometry when no
+  polygon/ring exists;
+- predefined fallback label position uses the first GeoJSON point;
 - manual polygon maps use the drawn geometry as one `gml:posList` in
   longitude/latitude order;
 - manual maps use `mapId=0`;
@@ -52,7 +57,6 @@ flowchart LR
     Creation --> Core[dam-core]
 
     Core --> Validation[Validation]
-    Core --> Json[JSON export]
     Core --> Aixm[AIXM XML export]
     Core --> Payload[SubmissionPayload]
 
@@ -62,7 +66,6 @@ flowchart LR
     subgraph CoreBoundary[dam-core: pure core]
         Creation
         Validation
-        Json
         Aixm
         Payload
     end

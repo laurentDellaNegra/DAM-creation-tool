@@ -1,9 +1,7 @@
 use super::ExportError;
 use super::aixm::{AixmExportError, to_aixm_xml};
-use super::json::to_pretty_json;
 use crate::{DamCreation, DamMap};
 
-pub const JSON_CONTENT_TYPE: &str = "application/json";
 pub const AIXM_XML_CONTENT_TYPE: &str = "application/xml";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,14 +9,6 @@ pub struct SubmissionPayload {
     pub filename: String,
     pub content_type: &'static str,
     pub body: String,
-}
-
-pub fn build_json_payload(creation: &DamCreation) -> Result<SubmissionPayload, ExportError> {
-    Ok(SubmissionPayload {
-        filename: "dam-export.json".to_owned(),
-        content_type: JSON_CONTENT_TYPE,
-        body: to_pretty_json(creation)?,
-    })
 }
 
 pub fn build_aixm_payload(creation: &DamCreation) -> Result<SubmissionPayload, ExportError> {
@@ -32,6 +22,14 @@ pub fn build_aixm_payload(creation: &DamCreation) -> Result<SubmissionPayload, E
         content_type: AIXM_XML_CONTENT_TYPE,
         body,
     })
+}
+
+pub fn build_aixm_payload_from_xml(creation: &DamCreation, body: String) -> SubmissionPayload {
+    SubmissionPayload {
+        filename: aixm_filename(creation),
+        content_type: AIXM_XML_CONTENT_TYPE,
+        body,
+    }
 }
 
 fn aixm_filename(creation: &DamCreation) -> String {
@@ -73,6 +71,8 @@ mod tests {
             map: DamMap::Predefined(SelectedStaticMap {
                 id: "50714".to_owned(),
                 name: "HAUT VALAIS".to_owned(),
+                fallback_geometry: None,
+                fallback_label_position: None,
             }),
             date_range: DateRange {
                 start: NaiveDate::from_ymd_opt(2026, 5, 7).unwrap(),
@@ -102,26 +102,6 @@ mod tests {
     }
 
     #[test]
-    fn json_payload_uses_expected_filename_content_type_and_body() {
-        let creation = valid_creation();
-        let payload = build_json_payload(&creation).unwrap();
-
-        assert_eq!(payload.filename, "dam-export.json");
-        assert_eq!(payload.content_type, JSON_CONTENT_TYPE);
-        assert_eq!(payload.body, to_pretty_json(&creation).unwrap());
-    }
-
-    #[test]
-    fn invalid_creation_does_not_build_json_payload() {
-        let mut creation = valid_creation();
-        creation.distribution.sectors.clear();
-
-        let error = build_json_payload(&creation).unwrap_err();
-
-        assert!(matches!(error, ExportError::Validation(_)));
-    }
-
-    #[test]
     fn invalid_creation_does_not_build_aixm_payload() {
         let mut creation = valid_creation();
         creation.distribution.sectors.clear();
@@ -139,6 +119,16 @@ mod tests {
         assert_eq!(payload.filename, "dam-50714-20260507.xml");
         assert_eq!(payload.content_type, AIXM_XML_CONTENT_TYPE);
         assert_eq!(payload.body, to_aixm_xml(&creation).unwrap());
+    }
+
+    #[test]
+    fn edited_aixm_payload_uses_aixm_filename_and_body() {
+        let creation = valid_creation();
+        let payload = build_aixm_payload_from_xml(&creation, "<xml/>".to_owned());
+
+        assert_eq!(payload.filename, "dam-50714-20260507.xml");
+        assert_eq!(payload.content_type, AIXM_XML_CONTENT_TYPE);
+        assert_eq!(payload.body, "<xml/>");
     }
 
     #[test]

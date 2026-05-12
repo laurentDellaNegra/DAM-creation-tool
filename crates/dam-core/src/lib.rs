@@ -6,15 +6,14 @@ mod validation;
 
 pub use catalog::{
     CatalogDiagnostic, Coordinate, MapCatalog, MapDefaults, PreviewGeometry, PreviewPath,
-    StaticMap, bundled_catalog, switzerland_default_preview,
+    StaticMap, StaticMapSymbol, StaticMapSymbolKind, bundled_catalog, switzerland_default_preview,
 };
 pub use distribution::{
     DistributionSelection, Sector, UnitGroup, default_distribution, unit_groups,
 };
 pub use export::{
-    AIXM_XML_CONTENT_TYPE, AixmExportError, AixmImportError, AixmXmlSummary, DamExport,
-    ExportError, JSON_CONTENT_TYPE, SubmissionPayload, aixm_xml_well_formed, apply_aixm_xml_update,
-    build_aixm_payload, build_json_payload, summarize_aixm_xml, to_aixm_xml, to_pretty_json,
+    AIXM_XML_CONTENT_TYPE, AixmExportError, AixmXmlError, ExportError, SubmissionPayload,
+    aixm_xml_well_formed, build_aixm_payload, build_aixm_payload_from_xml, to_aixm_xml,
 };
 pub use model::{
     AltitudeCorrection, BufferFilter, DamCreation, DamMap, DateRange, Level, LevelUnit,

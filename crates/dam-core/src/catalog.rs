@@ -68,6 +68,22 @@ pub struct StaticMap {
     pub description: Option<String>,
     pub preview: PreviewGeometry,
     pub defaults: MapDefaults,
+    pub symbols: Vec<StaticMapSymbol>,
+    pub aixm_fallback_geometry: Option<Vec<Coordinate>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StaticMapSymbolKind {
+    Para,
+    Fallback,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StaticMapSymbol {
+    pub code: String,
+    pub kind: StaticMapSymbolKind,
+    pub coordinate: Coordinate,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -169,8 +185,18 @@ fn parse_static_map(path: &str, source: &str) -> Result<StaticMap, String> {
         .and_then(Value::as_str)
         .map(ToOwned::to_owned);
 
-    let preview = preview_geometry_from_value(&value);
+    let mut preview = preview_geometry_from_value(&value);
     let defaults = extract_defaults(&value);
+    let symbols = extract_symbols(&value);
+    if preview.bbox.is_none() {
+        preview.bbox = point_bounding_box(
+            defaults
+                .label_coordinate
+                .into_iter()
+                .chain(symbols.iter().map(|symbol| symbol.coordinate)),
+        );
+    }
+    let aixm_fallback_geometry = first_polygon_ring(&value);
 
     Ok(StaticMap {
         id,
@@ -178,6 +204,8 @@ fn parse_static_map(path: &str, source: &str) -> Result<StaticMap, String> {
         description,
         preview,
         defaults,
+        symbols,
+        aixm_fallback_geometry,
     })
 }
 
@@ -269,6 +297,95 @@ fn parse_hex_color(hex: &str) -> Option<[u8; 3]> {
     Some([r, g, b])
 }
 
+fn extract_symbols(value: &Value) -> Vec<StaticMapSymbol> {
+    let Some(features) = value.get("features").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+
+    features
+        .iter()
+        .filter_map(|feature| {
+            let code = feature
+                .get("properties")
+                .and_then(|p| p.get("symbol"))
+                .and_then(Value::as_str)?;
+            let coordinate = point_coordinate(feature.get("geometry")?)?;
+            let kind = if code == "A_SYMBOL_SYM31" {
+                StaticMapSymbolKind::Para
+            } else {
+                StaticMapSymbolKind::Fallback
+            };
+            Some(StaticMapSymbol {
+                code: code.to_owned(),
+                kind,
+                coordinate,
+            })
+        })
+        .collect()
+}
+
+fn point_coordinate(geometry: &Value) -> Option<Coordinate> {
+    if geometry.get("type").and_then(Value::as_str) != Some("Point") {
+        return None;
+    }
+    geometry
+        .get("coordinates")
+        .and_then(Value::as_array)
+        .and_then(|coordinates| coordinate_from_array(coordinates))
+}
+
+fn first_polygon_ring(value: &Value) -> Option<Vec<Coordinate>> {
+    let features = value.get("features").and_then(Value::as_array)?;
+    for feature in features {
+        let geometry = feature.get("geometry")?;
+        match geometry.get("type").and_then(Value::as_str)? {
+            "Polygon" => {
+                if let Some(ring) = geometry
+                    .get("coordinates")
+                    .and_then(Value::as_array)
+                    .and_then(|rings| rings.first())
+                    .and_then(coordinates_from_line)
+                {
+                    return Some(ring);
+                }
+            }
+            "MultiPolygon" => {
+                if let Some(ring) = geometry
+                    .get("coordinates")
+                    .and_then(Value::as_array)
+                    .and_then(|polygons| polygons.first())
+                    .and_then(Value::as_array)
+                    .and_then(|rings| rings.first())
+                    .and_then(coordinates_from_line)
+                {
+                    return Some(ring);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn coordinates_from_line(value: &Value) -> Option<Vec<Coordinate>> {
+    let coordinates = value
+        .as_array()?
+        .iter()
+        .filter_map(|point| {
+            point
+                .as_array()
+                .and_then(|coordinates| coordinate_from_array(coordinates))
+        })
+        .collect::<Vec<_>>();
+    (coordinates.len() >= 3).then_some(coordinates)
+}
+
+fn coordinate_from_array(tuple: &[Value]) -> Option<Coordinate> {
+    let lon = tuple.first()?.as_f64()?;
+    let lat = tuple.get(1)?.as_f64()?;
+    Some(Coordinate { lon, lat })
+}
+
 fn extract_defaults(value: &Value) -> MapDefaults {
     let features = match value.get("features").and_then(Value::as_array) {
         Some(f) => f,
@@ -286,15 +403,7 @@ fn extract_defaults(value: &Value) -> MapDefaults {
         return MapDefaults::default();
     };
 
-    let label_coordinate = point_feature
-        .get("geometry")
-        .and_then(|g| g.get("coordinates"))
-        .and_then(Value::as_array)
-        .and_then(|coords| {
-            let lon = coords.first()?.as_f64()?;
-            let lat = coords.get(1)?.as_f64()?;
-            Some(Coordinate { lon, lat })
-        });
+    let label_coordinate = point_feature.get("geometry").and_then(point_coordinate);
 
     let remarks = point_feature
         .get("properties")
@@ -384,6 +493,21 @@ fn bounding_box(paths: &[PreviewPath]) -> Option<BoundingBox> {
         bbox.include(coordinate);
     }
 
+    Some(bbox)
+}
+
+fn point_bounding_box(points: impl IntoIterator<Item = Coordinate>) -> Option<BoundingBox> {
+    let mut points = points.into_iter();
+    let first = points.next()?;
+    let mut bbox = BoundingBox {
+        min_lon: first.lon,
+        min_lat: first.lat,
+        max_lon: first.lon,
+        max_lat: first.lat,
+    };
+    for point in points {
+        bbox.include(point);
+    }
     Some(bbox)
 }
 
@@ -516,5 +640,74 @@ mod tests {
         assert_eq!(map.defaults.text.as_deref(), Some("Test Box"));
         assert_eq!(map.defaults.upper_buffer, Some(BufferFilter::Half));
         assert_eq!(map.defaults.display_levels, Some(true));
+        assert_eq!(
+            map.aixm_fallback_geometry.as_deref(),
+            Some(
+                [
+                    Coordinate {
+                        lon: 8.0,
+                        lat: 47.0,
+                    },
+                    Coordinate {
+                        lon: 8.5,
+                        lat: 47.0,
+                    },
+                    Coordinate {
+                        lon: 8.5,
+                        lat: 47.5,
+                    },
+                    Coordinate {
+                        lon: 8.0,
+                        lat: 47.0,
+                    },
+                ]
+                .as_slice()
+            )
+        );
+    }
+
+    #[test]
+    fn extracts_symbol_points_and_fallback_kinds_from_geojson() {
+        let source = r##"{
+          "type": "FeatureCollection",
+          "name": "Point Symbols",
+          "features": [{
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [8.0, 47.0]},
+            "properties": {"remarks": "LEVEL/ll=000/ul=065"}
+          }, {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [8.1, 47.1]},
+            "properties": {"symbol": "A_SYMBOL_SYM31"}
+          }, {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [8.2, 47.2]},
+            "properties": {"symbol": "A_AERO_SYM1"}
+          }]
+        }"##;
+
+        let catalog = MapCatalog::from_entries([("88888.geojson".to_owned(), source.to_owned())]);
+        let map = &catalog.maps[0];
+
+        assert_eq!(map.symbols.len(), 2);
+        assert_eq!(map.symbols[0].code, "A_SYMBOL_SYM31");
+        assert_eq!(map.symbols[0].kind, StaticMapSymbolKind::Para);
+        assert_eq!(
+            map.symbols[0].coordinate,
+            Coordinate {
+                lon: 8.1,
+                lat: 47.1
+            }
+        );
+        assert_eq!(map.symbols[1].code, "A_AERO_SYM1");
+        assert_eq!(map.symbols[1].kind, StaticMapSymbolKind::Fallback);
+        assert_eq!(
+            map.symbols[1].coordinate,
+            Coordinate {
+                lon: 8.2,
+                lat: 47.2
+            }
+        );
+        assert!(map.preview.bbox.is_some());
     }
 }

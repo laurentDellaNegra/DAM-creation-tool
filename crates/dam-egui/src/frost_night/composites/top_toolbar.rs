@@ -11,7 +11,6 @@ use crate::frost_night::theme::Theme;
 pub struct ToolbarAction<'a> {
     pub icon: char,
     pub label: &'a str,
-    pub tooltip: &'a str,
     pub selected: bool,
     pub disabled: bool,
 }
@@ -104,7 +103,6 @@ pub fn top_toolbar_with_id(
                     Vec2::new(button_widths[index], button_height),
                     Sense::click(),
                 );
-                let response = response.on_hover_text(action.tooltip);
 
                 if !action.disabled && response.clicked() {
                     result.icon_clicked = Some(index);

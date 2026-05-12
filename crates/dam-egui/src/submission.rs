@@ -35,13 +35,13 @@ pub fn submit_payload(
 ) -> SubmissionResult {
     let Some(endpoint) = endpoint else {
         return SubmissionResult::Failed(
-            "Submission endpoint not configured. Use Download JSON to export locally.".to_owned(),
+            "Submission endpoint not configured. Use Download AIXM to export locally.".to_owned(),
         );
     };
 
     if endpoint.url.trim().is_empty() {
         return SubmissionResult::Failed(
-            "Submission endpoint not configured. Use Download JSON to export locally.".to_owned(),
+            "Submission endpoint not configured. Use Download AIXM to export locally.".to_owned(),
         );
     }
 

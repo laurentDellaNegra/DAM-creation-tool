@@ -394,6 +394,8 @@ mod tests {
             map: DamMap::Predefined(SelectedStaticMap {
                 id: "50714".to_owned(),
                 name: "HAUT VALAIS".to_owned(),
+                fallback_geometry: None,
+                fallback_label_position: None,
             }),
             date_range: DateRange::new(
                 NaiveDate::from_ymd_opt(2026, 5, 7).unwrap(),

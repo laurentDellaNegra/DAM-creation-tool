@@ -1,7 +1,8 @@
 use crate::form::{ClickTarget, ManualMapState, NextClickInfo};
 use dam_core::{
     Coordinate, ManualGeometry, ManualMap, ManualMapAttributes, ManualMapCategory,
-    ManualMapRendering, PreviewPath, TextNumberColor, TextNumberSize, expand_polygon_nodes,
+    ManualMapRendering, PreviewPath, StaticMapSymbol, StaticMapSymbolKind, TextNumberColor,
+    TextNumberSize, expand_polygon_nodes,
 };
 use geo::Buffer;
 
@@ -11,6 +12,7 @@ const EARTH_RADIUS_M: f64 = 6_371_008.8;
 pub struct PreviewOverlay {
     base_paths: Vec<PreviewPath>,
     selected_paths: Vec<PreviewPath>,
+    selected_symbols: Vec<StaticMapSymbol>,
     manual_map: Option<ManualMap>,
     level_label: Option<(Coordinate, String)>,
     next_click: Option<NextClickInfo>,
@@ -24,6 +26,7 @@ impl PreviewOverlay {
     pub fn new(
         base_paths: Vec<PreviewPath>,
         selected_paths: Vec<PreviewPath>,
+        selected_symbols: Vec<StaticMapSymbol>,
         manual_map: Option<ManualMap>,
         level_label: Option<(Coordinate, String)>,
         next_click: Option<NextClickInfo>,
@@ -34,6 +37,7 @@ impl PreviewOverlay {
         Self {
             base_paths,
             selected_paths,
+            selected_symbols,
             manual_map,
             level_label,
             next_click,
@@ -68,6 +72,7 @@ impl walkers::Plugin for PreviewOverlay {
             2.4,
             egui::Color32::from_rgb(95, 200, 205),
         );
+        paint_static_symbols(painter, projector, &self.selected_symbols);
 
         let hover_inside = response
             .hover_pos()
@@ -135,6 +140,23 @@ impl walkers::Plugin for PreviewOverlay {
                 paint_cursor_readout_below(painter, response.rect, target_rect, cursor_coord);
             } else {
                 paint_cursor_readout_near(painter, response.rect, hover_pos, cursor_coord);
+            }
+        }
+    }
+}
+
+fn paint_static_symbols(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    symbols: &[StaticMapSymbol],
+) {
+    for symbol in symbols {
+        match symbol.kind {
+            StaticMapSymbolKind::Para => {
+                paint_para_symbol(painter, projector, symbol.coordinate, para_symbol_color());
+            }
+            StaticMapSymbolKind::Fallback => {
+                paint_fallback_symbol(painter, projector, symbol.coordinate);
             }
         }
     }
@@ -474,6 +496,38 @@ fn paint_para_symbol(
     );
     painter.line_segment(
         [center + egui::vec2(10.0, -3.0), center],
+        egui::Stroke::new(1.4, color),
+    );
+}
+
+fn paint_fallback_symbol(
+    painter: &egui::Painter,
+    projector: &walkers::Projector,
+    coordinate: Coordinate,
+) {
+    let center = project(projector, coordinate);
+    let color = egui::Color32::from_rgb(242, 196, 84);
+    let radius = 7.0;
+    let points = vec![
+        center + egui::vec2(0.0, -radius),
+        center + egui::vec2(radius, 0.0),
+        center + egui::vec2(0.0, radius),
+        center + egui::vec2(-radius, 0.0),
+        center + egui::vec2(0.0, -radius),
+    ];
+    painter.add(egui::Shape::line(points, egui::Stroke::new(2.0, color)));
+    painter.line_segment(
+        [
+            center + egui::vec2(-4.0, 0.0),
+            center + egui::vec2(4.0, 0.0),
+        ],
+        egui::Stroke::new(1.4, color),
+    );
+    painter.line_segment(
+        [
+            center + egui::vec2(0.0, -4.0),
+            center + egui::vec2(0.0, 4.0),
+        ],
         egui::Stroke::new(1.4, color),
     );
 }
