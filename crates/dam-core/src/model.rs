@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fmt;
 
+use crate::geometry::{bearing_deg, destination_point};
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DamCreation {
     pub map: DamMap,
@@ -13,6 +15,8 @@ pub struct DamCreation {
     pub upper_buffer: BufferFilter,
     pub lower_buffer: BufferFilter,
     pub distribution: crate::DistributionSelection,
+    #[serde(default)]
+    pub a9: A9Level,
     pub text: TextInfo,
 }
 
@@ -158,39 +162,9 @@ fn shorter_arc_span(start_deg: f64, end_deg: f64) -> f64 {
     diff
 }
 
-fn bearing_deg(from: crate::Coordinate, to: crate::Coordinate) -> f64 {
-    let lat1 = from.lat.to_radians();
-    let lat2 = to.lat.to_radians();
-    let dlon = (to.lon - from.lon).to_radians();
-    let y = dlon.sin() * lat2.cos();
-    let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * dlon.cos();
-    y.atan2(x).to_degrees()
-}
-
-fn destination_point(
-    origin: crate::Coordinate,
-    bearing_deg: f64,
-    distance_nm: f64,
-) -> crate::Coordinate {
-    const EARTH_RADIUS_NM: f64 = 3440.065;
-    let angular = distance_nm / EARTH_RADIUS_NM;
-    let bearing = bearing_deg.to_radians();
-    let lat1 = origin.lat.to_radians();
-    let lon1 = origin.lon.to_radians();
-    let lat2 = (lat1.sin() * angular.cos() + lat1.cos() * angular.sin() * bearing.cos()).asin();
-    let lon2 = lon1
-        + (bearing.sin() * angular.sin() * lat1.cos())
-            .atan2(angular.cos() - lat1.sin() * lat2.sin());
-    crate::Coordinate {
-        lon: lon2.to_degrees(),
-        lat: lat2.to_degrees(),
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ManualMapAttributes {
     pub category: ManualMapCategory,
-    pub rendering: ManualMapRendering,
     pub lateral_buffer_nm: f64,
 }
 
@@ -198,7 +172,6 @@ impl Default for ManualMapAttributes {
     fn default() -> Self {
         Self {
             category: ManualMapCategory::Danger,
-            rendering: ManualMapRendering::Surface,
             lateral_buffer_nm: 0.0,
         }
     }
@@ -242,25 +215,6 @@ impl ManualMapCategory {
             ManualMapCategory::Tma => "TMA",
             ManualMapCategory::Para => "Para",
             ManualMapCategory::Other => "Other",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ManualMapRendering {
-    Surface,
-    Line,
-}
-
-impl ManualMapRendering {
-    pub const ALL: [ManualMapRendering; 2] =
-        [ManualMapRendering::Surface, ManualMapRendering::Line];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            ManualMapRendering::Surface => "Surface",
-            ManualMapRendering::Line => "Line",
         }
     }
 }
@@ -463,6 +417,35 @@ impl LevelUnit {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum A9Level {
+    #[default]
+    L140_0,
+    L150_1,
+    L160_2,
+}
+
+impl A9Level {
+    pub const ALL: [A9Level; 3] = [A9Level::L140_0, A9Level::L150_1, A9Level::L160_2];
+
+    pub fn export_value(self) -> &'static str {
+        match self {
+            A9Level::L140_0 => "140:0",
+            A9Level::L150_1 => "150:1",
+            A9Level::L160_2 => "160:2",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            A9Level::L140_0 => "140",
+            A9Level::L150_1 => "150",
+            A9Level::L160_2 => "160",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AltitudeCorrection {
     #[default]
     None,
@@ -482,7 +465,6 @@ pub enum BufferFilter {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextInfo {
     pub value: String,
-    pub display: bool,
 }
 
 pub fn possible_weekdays(start: NaiveDate, end: NaiveDate) -> BTreeSet<Weekday> {
@@ -497,4 +479,19 @@ pub fn possible_weekdays(start: NaiveDate, end: NaiveDate) -> BTreeSet<Weekday> 
         date += Duration::days(1);
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a9_labels_are_short_but_export_values_keep_legacy_suffix() {
+        assert_eq!(A9Level::L140_0.label(), "140");
+        assert_eq!(A9Level::L150_1.label(), "150");
+        assert_eq!(A9Level::L160_2.label(), "160");
+        assert_eq!(A9Level::L140_0.export_value(), "140:0");
+        assert_eq!(A9Level::L150_1.export_value(), "150:1");
+        assert_eq!(A9Level::L160_2.export_value(), "160:2");
+    }
 }

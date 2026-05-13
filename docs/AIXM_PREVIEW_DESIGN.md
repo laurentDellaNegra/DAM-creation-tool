@@ -2,8 +2,8 @@
 
 ## Goal
 
-Provide a right-side AIXM workspace before Send. Operators can inspect the
-generated AIXM, explicitly enter XML edit mode, then send or download either the
+Provide a right-side AIXM workspace before download. Operators can inspect the
+generated AIXM, explicitly enter XML edit mode, then download either the
 form-generated XML or the active edited XML draft.
 
 ## Source of Truth
@@ -13,7 +13,7 @@ write back into the form, catalog-derived state, or map drawing state.
 
 When the preview opens for the first time, the XML is generated from the current
 form. `Edit XML` unlocks the text buffer. From that point, any text change is a
-draft for submission/download only.
+download draft only.
 
 ## Draft Lifecycle
 
@@ -21,7 +21,7 @@ draft for submission/download only.
 - `Discard XML changes` regenerates XML from the current form and returns to
   read-only mode.
 - Any AIXM-affecting form change automatically discards an edited draft,
-  regenerates from the form, and shows `AIXM draft discarded because form
+  regenerates from the form, and shows `Edited XML draft discarded because form
   changed.`
 - Predefined-map search/filter text is UI-only and does not invalidate a draft.
 - If the form becomes invalid, the edited draft is still discarded and the panel
@@ -33,21 +33,19 @@ Read-only footer:
 
 - `Edit XML`
 - `Download AIXM`
-- `Send`
 
 Edit footer:
 
 - `Discard XML changes`
 - `Download AIXM`
-- `Send`
 
-Global toolbar `Send` and `Download AIXM` use the active edited XML draft when
-one exists, even if the preview panel is closed. Otherwise they generate XML
-from the current form.
+Global toolbar `Download AIXM` uses the active edited XML draft when one exists,
+even if the preview panel is closed. Otherwise it generates XML from the current
+form.
 
-Malformed edited XML blocks `Send` and `Download AIXM`. The panel disables those
-buttons and displays the XML parse error. Global toolbar actions surface the
-same error as a validation toast.
+Malformed edited XML blocks `Download AIXM`. The panel disables the button and
+displays the XML parse error. The global toolbar action surfaces the same error
+as a validation toast.
 
 ## Predefined Map Fallback Data
 

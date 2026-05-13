@@ -114,8 +114,8 @@ pub fn validate_creation(creation: &DamCreation) -> Result<(), ValidationError> 
 
     if creation.distribution.is_empty() {
         issues.push(ValidationIssue::new(
-            "distribution.sectors",
-            "At least one Unit/Sector must be selected.",
+            "distribution",
+            "At least one distribution target must be selected.",
         ));
     }
 
@@ -125,6 +125,38 @@ pub fn validate_creation(creation: &DamCreation) -> Result<(), ValidationError> 
             "Text must be 250 characters or fewer.",
         ));
     }
+    validate_exported_string(&creation.text.value, "text.value", &mut issues);
+
+    if issues.is_empty() {
+        Ok(())
+    } else {
+        Err(ValidationError { issues })
+    }
+}
+
+pub fn validate_aixm_export_ready(creation: &DamCreation) -> Result<(), ValidationError> {
+    let mut issues = Vec::new();
+
+    validate_map_export_ready(&creation.map, &mut issues);
+    if creation.periods.is_empty() {
+        issues.push(ValidationIssue::new(
+            "periods",
+            "At least one activation period is required for AIXM export.",
+        ));
+    }
+    if creation.periods.len() > MAX_PERIODS {
+        issues.push(ValidationIssue::new(
+            "periods",
+            format!("At most {MAX_PERIODS} activation periods can be exported."),
+        ));
+    }
+    if creation.distribution.is_empty() {
+        issues.push(ValidationIssue::new(
+            "distribution",
+            "At least one distribution target must be selected for AIXM export.",
+        ));
+    }
+    validate_exported_string(&creation.text.value, "text.value", &mut issues);
 
     if issues.is_empty() {
         Ok(())
@@ -150,6 +182,32 @@ fn validate_map(map: &DamMap, issues: &mut Vec<ValidationIssue>) {
     }
 }
 
+fn validate_map_export_ready(map: &DamMap, issues: &mut Vec<ValidationIssue>) {
+    match map {
+        DamMap::Predefined(selected) => {
+            if selected.id.trim().is_empty() {
+                issues.push(ValidationIssue::new(
+                    "map.id",
+                    "A predefined map must be selected for export.",
+                ));
+            }
+            validate_exported_string(&selected.name, "map.name", issues);
+        }
+        DamMap::Manual(manual) => {
+            validate_exported_string(&manual.name, "map.name", issues);
+            if matches!(manual.geometry, ManualGeometry::ParaSymbol { .. })
+                && !manual.name.to_ascii_uppercase().contains("PARA")
+            {
+                issues.push(ValidationIssue::new(
+                    "map.name",
+                    "Para symbol map name must contain PARA.",
+                ));
+            }
+            validate_manual_geometry_export_ready(&manual.geometry, issues);
+        }
+    }
+}
+
 fn validate_manual_map(manual: &ManualMap, issues: &mut Vec<ValidationIssue>) {
     if manual.name.trim().is_empty() {
         issues.push(ValidationIssue::new(
@@ -157,6 +215,7 @@ fn validate_manual_map(manual: &ManualMap, issues: &mut Vec<ValidationIssue>) {
             "Manual map name is required.",
         ));
     }
+    validate_exported_string(&manual.name, "map.name", issues);
 
     if manual_geometry_uses_level_label(&manual.geometry) {
         if let Some(label) = manual.label_position {
@@ -234,6 +293,14 @@ fn validate_manual_geometry(geometry: &ManualGeometry, issues: &mut Vec<Validati
                                 "Arc radius must be greater than zero NM.",
                             ));
                         }
+                        if !has_point_anchor(nodes, index, false)
+                            || !has_point_anchor(nodes, index, true)
+                        {
+                            issues.push(ValidationIssue::new(
+                                format!("map.geometry.nodes[{index}]"),
+                                "Polygon arc requires valid adjacent point anchors.",
+                            ));
+                        }
                     }
                 }
             }
@@ -261,6 +328,7 @@ fn validate_manual_geometry(geometry: &ManualGeometry, issues: &mut Vec<Validati
                     "Text and number value must be 25 characters or fewer.",
                 ));
             }
+            validate_exported_string(text, "map.geometry.text", issues);
         }
         ManualGeometry::PieCircle {
             center,
@@ -343,10 +411,62 @@ fn validate_coordinate(
 }
 
 fn validate_angle(angle: f64, field: &str, issues: &mut Vec<ValidationIssue>) {
-    if !angle.is_finite() || !(0.0..=360.0).contains(&angle) {
+    if !angle.is_finite() || !(-360.0..=360.0).contains(&angle) {
         issues.push(ValidationIssue::new(
             field,
-            "Angle must be between 0 and 360 degrees.",
+            "Angle must be between -360 and 360 degrees.",
+        ));
+    }
+}
+
+fn validate_manual_geometry_export_ready(
+    geometry: &ManualGeometry,
+    issues: &mut Vec<ValidationIssue>,
+) {
+    match geometry {
+        ManualGeometry::Polygon { nodes } => {
+            for (index, node) in nodes.iter().enumerate() {
+                if matches!(node, PolygonNode::Arc { .. })
+                    && (!has_point_anchor(nodes, index, false)
+                        || !has_point_anchor(nodes, index, true))
+                {
+                    issues.push(ValidationIssue::new(
+                        format!("map.geometry.nodes[{index}]"),
+                        "Polygon arc requires valid adjacent point anchors.",
+                    ));
+                }
+            }
+        }
+        ManualGeometry::TextNumber { text, .. } => {
+            validate_exported_string(text, "map.geometry.text", issues);
+        }
+        ManualGeometry::ParaSymbol { .. }
+        | ManualGeometry::PieCircle { .. }
+        | ManualGeometry::Strip { .. } => {}
+    }
+}
+
+fn has_point_anchor(nodes: &[PolygonNode], index: usize, previous: bool) -> bool {
+    if nodes.len() < 2 {
+        return false;
+    }
+    let anchor_index = if previous {
+        if index == 0 {
+            nodes.len() - 1
+        } else {
+            index - 1
+        }
+    } else {
+        (index + 1) % nodes.len()
+    };
+    matches!(nodes.get(anchor_index), Some(PolygonNode::Point { .. }))
+}
+
+fn validate_exported_string(value: &str, field: &str, issues: &mut Vec<ValidationIssue>) {
+    if value.chars().any(char::is_control) {
+        issues.push(ValidationIssue::new(
+            field,
+            "Exported text must not contain newlines or control characters.",
         ));
     }
 }
@@ -383,8 +503,8 @@ fn validate_period_overlaps(
 mod tests {
     use super::*;
     use crate::{
-        AltitudeCorrection, BufferFilter, Coordinate, DateRange, DistributionSelection, Level,
-        LevelUnit, ManualMapAttributes, ManualMapCategory, ManualMapRendering, Period, PolygonNode,
+        A9Level, AltitudeCorrection, BufferFilter, Coordinate, DateRange, DistributionSelection,
+        Level, LevelUnit, ManualMapAttributes, ManualMapCategory, Period, PolygonNode,
         SelectedStaticMap, TextInfo, TextNumberColor, TextNumberSize,
     };
     use chrono::NaiveDate;
@@ -414,6 +534,7 @@ mod tests {
             upper_buffer: BufferFilter::Default,
             lower_buffer: BufferFilter::Default,
             distribution: DistributionSelection::all(),
+            a9: A9Level::default(),
             text: TextInfo::default(),
         }
     }
@@ -676,11 +797,10 @@ mod tests {
 
     fn manual_map(geometry: ManualGeometry) -> ManualMap {
         ManualMap {
-            name: "Manual map".to_owned(),
+            name: "MANUAL MAP".to_owned(),
             geometry,
             attributes: ManualMapAttributes {
                 category: ManualMapCategory::Danger,
-                rendering: ManualMapRendering::Surface,
                 lateral_buffer_nm: 0.0,
             },
             label_position: Some(coordinate(7.0, 46.0)),

@@ -1,11 +1,12 @@
 use crate::{current_date_text, parse_date, parse_level, parse_time};
 use chrono::NaiveDate;
 use dam_core::{
-    AltitudeCorrection, BufferFilter, Coordinate, DamCreation, DamMap, DateRange,
+    A9Level, AltitudeCorrection, BufferFilter, Coordinate, DamCreation, DamMap, DateRange,
     DistributionSelection, LevelUnit, MAX_POLYGON_POINTS, ManualGeometry, ManualMap,
-    ManualMapAttributes, ManualMapCategory, ManualMapRendering, MapCatalog, MapDefaults, Period,
-    PolygonNode, SelectedStaticMap, StaticMap, TextInfo, TextNumberColor, TextNumberSize,
-    ValidationIssue, Weekday, default_distribution,
+    ManualMapAttributes, ManualMapCategory, MapCatalog, MapDefaults, Period, PolygonNode,
+    SelectedStaticMap, StaticMap, TextInfo, TextNumberColor, TextNumberSize, ValidationIssue,
+    Weekday, bearing_deg, default_distribution, distance_nm,
+    legacy_distribution_from_catalog_stations,
 };
 use std::collections::BTreeSet;
 
@@ -93,8 +94,8 @@ pub struct DamFormState {
     pub upper_buffer: BufferFilter,
     pub lower_buffer: BufferFilter,
     pub distribution: DistributionSelection,
+    pub a9: A9Level,
     pub text: String,
-    pub display_text: bool,
     pub display_levels: bool,
 }
 
@@ -413,19 +414,9 @@ fn perpendicular_distance_nm(line_a: Coordinate, line_b: Coordinate, point: Coor
     (dist * angle.sin()).abs()
 }
 
-fn bearing_deg(from: Coordinate, to: Coordinate) -> f64 {
-    let lat1 = from.lat.to_radians();
-    let lat2 = to.lat.to_radians();
-    let dlon = (to.lon - from.lon).to_radians();
-    let y = dlon.sin() * lat2.cos();
-    let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * dlon.cos();
-    y.atan2(x).to_degrees()
-}
-
 #[derive(Debug, Clone)]
 pub struct ManualAttributesState {
     pub category: ManualMapCategory,
-    pub rendering: ManualMapRendering,
     pub lateral_buffer_nm: String,
 }
 
@@ -434,7 +425,6 @@ impl Default for ManualAttributesState {
         let defaults = ManualMapAttributes::default();
         Self {
             category: defaults.category,
-            rendering: defaults.rendering,
             lateral_buffer_nm: format_nm(defaults.lateral_buffer_nm),
         }
     }
@@ -458,7 +448,6 @@ impl ManualAttributesState {
         };
         ManualMapAttributes {
             category: self.category,
-            rendering: self.rendering,
             lateral_buffer_nm,
         }
     }
@@ -669,8 +658,8 @@ impl DamFormState {
             upper_buffer: BufferFilter::Default,
             lower_buffer: BufferFilter::Default,
             distribution: default_distribution(),
+            a9: A9Level::default(),
             text: String::new(),
-            display_text: false,
             display_levels: true,
         };
         state.sync_weekdays_from_dates();
@@ -763,7 +752,9 @@ impl DamFormState {
         }
         if let Some(ref text) = defaults.text {
             self.text = text.clone();
-            self.display_text = true;
+        }
+        if let Some(distribution) = legacy_distribution_from_catalog_stations(&defaults.stations) {
+            self.distribution = distribution;
         }
     }
 
@@ -845,9 +836,9 @@ impl DamFormState {
             upper_buffer: self.upper_buffer,
             lower_buffer: self.lower_buffer,
             distribution: self.distribution.clone(),
+            a9: self.a9,
             text: TextInfo {
                 value: self.text.clone(),
-                display: self.display_text,
             },
         })
     }
@@ -943,16 +934,6 @@ fn format_nm(value: f64) -> String {
     } else {
         format!("{value:.2}")
     }
-}
-
-fn distance_nm(left: Coordinate, right: Coordinate) -> f64 {
-    const EARTH_RADIUS_NM: f64 = 3440.065;
-    let lat1 = left.lat.to_radians();
-    let lat2 = right.lat.to_radians();
-    let dlat = (right.lat - left.lat).to_radians();
-    let dlon = (right.lon - left.lon).to_radians();
-    let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
-    EARTH_RADIUS_NM * 2.0 * a.sqrt().atan2((1.0 - a).sqrt())
 }
 
 #[derive(Debug, Clone)]

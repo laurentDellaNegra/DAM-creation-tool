@@ -1,10 +1,11 @@
+mod export_status;
 mod form;
 mod frost_night;
 mod online_tiles;
 mod platform;
 mod preview;
-mod submission;
 
+use crate::export_status::ExportStatus;
 use crate::form::{
     ArcDraftState, ClickTarget, CoordinateFieldState, DamFormState, LevelFieldState,
     ManualGeometryType, MapMode, PeriodRowState, PieCircleDraftState, PolygonDraftState,
@@ -12,10 +13,10 @@ use crate::form::{
 };
 use crate::frost_night::components::{BadgeVariant, badge, checkbox as frost_checkbox, segmented};
 use crate::frost_night::composites::{ToolbarAction, top_toolbar_with_id};
-use crate::frost_night::containers::{DragCardState, drag_card, tabs_with_id};
+use crate::frost_night::containers::tabs_with_id;
 use crate::frost_night::icons::{
     ICON_CIRCLE_CHECK, ICON_CIRCLE_X, ICON_CROSSHAIR, ICON_EYE, ICON_GLOBE, ICON_RAINBOW,
-    ICON_ROTATE_CCW, ICON_SEND_HORIZONTAL, ICON_TRASH, ICON_X, icon_text,
+    ICON_ROTATE_CCW, ICON_TRASH, ICON_X, icon_text,
 };
 use crate::frost_night::theme::{mix, typography};
 use crate::frost_night::{
@@ -23,14 +24,13 @@ use crate::frost_night::{
 };
 use crate::online_tiles::CartoDarkMatter;
 use crate::preview::PreviewOverlay;
-use crate::submission::{SubmissionEndpoint, SubmissionResult, SubmissionStatus, submit_payload};
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime};
 use dam_core::{
-    AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate, MAX_PERIODS,
-    MAX_POLYGON_POINTS, ManualMapCategory, ManualMapRendering, MapCatalog, PreviewGeometry,
-    StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday, aixm_xml_well_formed,
-    build_aixm_payload, build_aixm_payload_from_xml, bundled_catalog, switzerland_default_preview,
-    unit_groups,
+    A9Level, AltitudeCorrection, BufferFilter, CatalogDiagnostic, Coordinate,
+    LegacyDistributionTarget, MAX_PERIODS, MAX_POLYGON_POINTS, ManualMapCategory, MapCatalog,
+    PreviewGeometry, StaticMap, TextNumberColor, TextNumberSize, ValidationIssue, Weekday,
+    aixm_xml_well_formed, build_aixm_payload, build_aixm_payload_from_xml, bundled_catalog,
+    switzerland_default_preview,
 };
 use std::time::Duration as StdDuration;
 
@@ -42,14 +42,11 @@ pub struct DamApp {
     selected_period: usize,
     map_memory: walkers::MapMemory,
     map_tiles: walkers::HttpTiles,
-    show_distribution: bool,
-    distribution_card: DragCardState,
     show_reset_confirm: bool,
     active_date_picker: Option<DateField>,
     date_picker_month: NaiveDate,
     diagnostics_open: bool,
-    submission_endpoint: Option<SubmissionEndpoint>,
-    submission_status: SubmissionStatus,
+    export_status: ExportStatus,
     toast_status_key: String,
     toast_started_at: Option<f64>,
     pending_click_target: Option<ClickTarget>,
@@ -68,7 +65,7 @@ const MANUAL_ATTRIBUTE_CATEGORIES: [ManualMapCategory; 6] = [
 
 const AIXM_PREVIEW_PANEL_WIDTH: f32 = 560.0;
 const AIXM_PREVIEW_PANEL_MIN_WIDTH: f32 = 320.0;
-const AIXM_PREVIEW_RESIZE_HANDLE_WIDTH: f32 = 8.0;
+const AIXM_PREVIEW_RESIZE_HANDLE_WIDTH: f32 = 14.0;
 const FLOATING_PANEL_MARGIN: f32 = 12.0;
 const AIXM_PREVIEW_FOOTER_HEIGHT: f32 = 36.0;
 const TOAST_VISIBLE_SECONDS: f64 = 5.0;
@@ -99,7 +96,7 @@ struct AixmPreviewState {
     xml: String,
     generated_xml: String,
     form_signature: String,
-    status: Option<SubmissionStatus>,
+    status: Option<ExportStatus>,
 }
 
 impl Default for AixmPreviewState {
@@ -165,17 +162,11 @@ impl DamApp {
             selected_period: 0,
             map_memory,
             map_tiles: walkers::HttpTiles::new(CartoDarkMatter, cc.egui_ctx.clone()),
-            show_distribution: false,
-            distribution_card: DragCardState {
-                pos: egui::pos2(96.0, 96.0),
-                size: egui::vec2(456.0, 520.0),
-            },
             show_reset_confirm: false,
             active_date_picker: None,
             date_picker_month: first_day_of_month(current_date()),
             diagnostics_open: false,
-            submission_endpoint: None,
-            submission_status: SubmissionStatus::Idle,
+            export_status: ExportStatus::Idle,
             toast_status_key: String::new(),
             toast_started_at: None,
             pending_click_target: None,
@@ -214,8 +205,7 @@ impl eframe::App for DamApp {
         self.sync_aixm_preview_after_form_changes();
         self.toolbar(ui.ctx());
         self.aixm_preview_overlay(ui.ctx());
-        self.submission_status_toast(ui.ctx());
-        self.distribution_window(ui.ctx());
+        self.export_status_toast(ui.ctx());
         self.reset_confirmation(ui.ctx());
     }
 }
@@ -835,12 +825,6 @@ impl DamApp {
                     "dam-action-toolbar",
                     &[
                         ToolbarAction {
-                            icon: ICON_SEND_HORIZONTAL,
-                            label: "Send",
-                            selected: false,
-                            disabled: false,
-                        },
-                        ToolbarAction {
                             icon: ICON_EYE,
                             label: "Preview AIXM",
                             selected: self.aixm_preview.open,
@@ -862,10 +846,9 @@ impl DamApp {
                 );
 
                 match response.icon_clicked {
-                    Some(0) => self.send(),
-                    Some(1) => self.toggle_aixm_preview(),
-                    Some(2) => self.download_aixm(),
-                    Some(3) => self.show_reset_confirm = true,
+                    Some(0) => self.toggle_aixm_preview(),
+                    Some(1) => self.download_aixm(),
+                    Some(2) => self.show_reset_confirm = true,
                     _ => {}
                 }
             });
@@ -901,8 +884,8 @@ impl DamApp {
         let had_edited_draft = self.aixm_preview.has_edited_draft();
         self.refresh_aixm_preview_from_form(true);
         if had_edited_draft {
-            self.submission_status = SubmissionStatus::Ready {
-                message: "AIXM draft discarded because form changed.".to_owned(),
+            self.export_status = ExportStatus::Ready {
+                message: "Edited XML draft discarded because form changed.".to_owned(),
             };
         }
     }
@@ -943,16 +926,16 @@ impl DamApp {
         self.aixm_preview.mode = AixmPreviewMode::ReadOnly;
     }
 
-    fn active_aixm_payload(&mut self) -> Result<dam_core::SubmissionPayload, SubmissionStatus> {
+    fn active_aixm_payload(&mut self) -> Result<dam_core::AixmPayload, ExportStatus> {
         self.sync_aixm_preview_after_form_changes();
         let creation = self
             .form
             .to_creation(&self.catalog)
-            .map_err(SubmissionStatus::Invalid)?;
+            .map_err(ExportStatus::Invalid)?;
 
         if self.aixm_preview.has_edited_draft() {
             if let Err(error) = aixm_xml_well_formed(&self.aixm_preview.xml) {
-                return Err(SubmissionStatus::Invalid(error.issues));
+                return Err(ExportStatus::Invalid(error.issues));
             }
             Ok(build_aixm_payload_from_xml(
                 &creation,
@@ -988,7 +971,11 @@ impl DamApp {
                 ui.set_min_size(size);
                 ui.set_max_size(size);
                 let (panel_rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-                let panel_content_rect = panel_rect.shrink(panel_padding);
+                let mut panel_content_rect = panel_rect.shrink(panel_padding);
+                panel_content_rect.min.x = panel_content_rect
+                    .min
+                    .x
+                    .max(panel_rect.left() + AIXM_PREVIEW_RESIZE_HANDLE_WIDTH + 2.0);
                 ui.set_clip_rect(panel_rect);
 
                 let radius = egui::CornerRadius::same(self.frost_theme.radius.lg);
@@ -1001,6 +988,36 @@ impl DamApp {
                     egui::StrokeKind::Inside,
                 );
 
+                let resize_rect = egui::Rect::from_min_max(
+                    panel_rect.left_top(),
+                    egui::pos2(
+                        panel_rect.left() + AIXM_PREVIEW_RESIZE_HANDLE_WIDTH,
+                        panel_rect.bottom(),
+                    ),
+                );
+                let resize_response = ui.interact(
+                    resize_rect,
+                    ui.make_persistent_id("aixm-preview-resize-handle"),
+                    egui::Sense::drag(),
+                );
+                if resize_response.hovered() || resize_response.dragged() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                    ui.painter().line_segment(
+                        [resize_rect.center_top(), resize_rect.center_bottom()],
+                        egui::Stroke::new(1.0, self.frost_theme.palette.ring),
+                    );
+                }
+                if resize_response.dragged() {
+                    let pointer_delta_x = ui.input(|input| input.pointer.delta().x);
+                    if pointer_delta_x != 0.0 {
+                        self.aixm_preview.width = clamp_aixm_panel_width(
+                            self.aixm_preview.width - pointer_delta_x,
+                            content_rect.width(),
+                        );
+                        ctx.request_repaint();
+                    }
+                }
+
                 let mut panel_ui = ui.new_child(
                     egui::UiBuilder::new()
                         .id_salt("aixm_preview_panel_content")
@@ -1012,53 +1029,26 @@ impl DamApp {
                 panel_ui.set_max_size(panel_content_rect.size());
                 self.aixm_preview_panel(&mut panel_ui);
             });
-
-        egui::Area::new(egui::Id::new("aixm_preview_resize_handle"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(pos)
-            .show(ctx, |ui| {
-                let handle_size = egui::vec2(AIXM_PREVIEW_RESIZE_HANDLE_WIDTH, panel_height);
-                ui.set_min_size(handle_size);
-                ui.set_max_size(handle_size);
-
-                let (rect, response) = ui.allocate_exact_size(handle_size, egui::Sense::drag());
-                if response.hovered() || response.dragged() {
-                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-                }
-                if response.dragged() {
-                    self.aixm_preview.width = clamp_aixm_panel_width(
-                        self.aixm_preview.width - response.drag_delta().x,
-                        content_rect.width(),
-                    );
-                    ctx.request_repaint();
-                }
-                if response.hovered() || response.dragged() {
-                    ui.painter().line_segment(
-                        [rect.center_top(), rect.center_bottom()],
-                        egui::Stroke::new(1.0, self.frost_theme.palette.ring),
-                    );
-                }
-            });
     }
 
-    fn submission_status_toast(&mut self, ctx: &egui::Context) {
-        if self.submission_status.is_idle() {
+    fn export_status_toast(&mut self, ctx: &egui::Context) {
+        if self.export_status.is_idle() {
             self.toast_status_key.clear();
             self.toast_started_at = None;
             return;
         }
 
-        let status_key = submission_status_key(&self.submission_status);
+        let status_key = export_status_key(&self.export_status);
         let now = ctx.input(|input| input.time);
         if self.toast_status_key != status_key {
             self.toast_status_key = status_key;
             self.toast_started_at = Some(now);
         }
-        let timeout = toast_timeout_seconds(&self.submission_status);
+        let timeout = toast_timeout_seconds(&self.export_status);
         if let Some(started_at) = self.toast_started_at
             && now - started_at >= timeout
         {
-            self.submission_status = SubmissionStatus::Idle;
+            self.export_status = ExportStatus::Idle;
             self.toast_status_key.clear();
             self.toast_started_at = None;
             return;
@@ -1084,7 +1074,7 @@ impl DamApp {
         let pos = egui::pos2(toast_x, content_rect.bottom() - FLOATING_PANEL_MARGIN);
         let mut dismiss = false;
 
-        egui::Area::new(egui::Id::new("submission_status_toast"))
+        egui::Area::new(egui::Id::new("export_status_toast"))
             .order(egui::Order::Foreground)
             .pivot(egui::Align2::LEFT_BOTTOM)
             .fixed_pos(pos)
@@ -1096,16 +1086,13 @@ impl DamApp {
                     .corner_radius(egui::CornerRadius::same(self.frost_theme.radius.lg))
                     .inner_margin(egui::Margin::same(self.frost_theme.spacing.md as i8))
                     .show(ui, |ui| {
-                        dismiss = render_submission_status_toast(
-                            ui,
-                            &self.frost_theme,
-                            &self.submission_status,
-                        );
+                        dismiss =
+                            render_export_status_toast(ui, &self.frost_theme, &self.export_status);
                     });
             });
 
         if dismiss {
-            self.submission_status = SubmissionStatus::Idle;
+            self.export_status = ExportStatus::Idle;
             self.toast_status_key.clear();
             self.toast_started_at = None;
         }
@@ -1348,12 +1335,15 @@ impl DamApp {
     fn manual_map_section(&mut self, ui: &mut egui::Ui) {
         let theme = self.frost_theme.clone();
         ui.label("Map name");
-        themed_text_edit(
+        let name_response = themed_text_edit(
             ui,
             &theme,
             egui::TextEdit::singleline(&mut self.form.manual.name).desired_width(f32::INFINITY),
             ControlSize::Md,
         );
+        if name_response.changed() {
+            self.form.manual.name = self.form.manual.name.to_uppercase();
+        }
 
         ui.add_space(theme.spacing.sm);
         ui.label("Geometry type");
@@ -1424,17 +1414,6 @@ impl DamApp {
                 {
                     self.form.manual.attributes.category =
                         MANUAL_ATTRIBUTE_CATEGORIES[selected_category];
-                }
-
-                ui.label("Rendering");
-                let rendering_labels = ManualMapRendering::ALL.map(ManualMapRendering::label);
-                let mut selected_rendering = ManualMapRendering::ALL
-                    .iter()
-                    .position(|rendering| *rendering == self.form.manual.attributes.rendering)
-                    .unwrap_or(0);
-                if segmented(ui, &theme, &rendering_labels, &mut selected_rendering).changed() {
-                    self.form.manual.attributes.rendering =
-                        ManualMapRendering::ALL[selected_rendering];
                 }
 
                 ui.label("Lateral buffer (NM)");
@@ -1549,7 +1528,9 @@ impl DamApp {
 
     fn periods_section(&mut self, ui: &mut egui::Ui) {
         let theme = self.frost_theme.clone();
-        frost_checkbox(ui, &theme, &mut self.form.display_levels, "Display levels");
+        if self.display_levels_supported() {
+            frost_checkbox(ui, &theme, &mut self.form.display_levels, "Display levels");
+        }
         ui.label(format!(
             "{} / {MAX_PERIODS} activation period(s)",
             self.form.periods.len()
@@ -1667,52 +1648,49 @@ impl DamApp {
         {
             self.form.lower_buffer = buffer_options[selected_lower_buffer];
         }
+
+        ui.label("A9");
+        let a9_options = A9Level::ALL;
+        let a9_labels = a9_options.map(A9Level::label);
+        let mut selected_a9 = a9_options
+            .iter()
+            .position(|option| *option == self.form.a9)
+            .unwrap_or(0);
+        if segmented(ui, &self.frost_theme, &a9_labels, &mut selected_a9).changed() {
+            self.form.a9 = a9_options[selected_a9];
+        }
     }
 
     fn distribution_section(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui
-                .frost_button(
-                    &self.frost_theme,
-                    "Unit / Sector",
-                    ControlVariant::Secondary,
-                    ControlSize::Md,
-                )
-                .clicked()
-            {
-                self.show_distribution = true;
-            }
-            ui.label(format!(
-                "{} sector(s) selected",
-                self.form.distribution.sectors.len()
-            ));
-        });
+        ui.label(format!(
+            "{} / 12 target(s) selected",
+            self.form.distribution.selected_count()
+        ));
+        egui::Grid::new("legacy_distribution_grid")
+            .num_columns(2)
+            .spacing([16.0, 6.0])
+            .show(ui, |ui| {
+                for (index, target) in LegacyDistributionTarget::ORDER.iter().enumerate() {
+                    let mut selected = self.form.distribution.is_selected(*target);
+                    if frost_checkbox(ui, &self.frost_theme, &mut selected, target.label())
+                        .changed()
+                    {
+                        self.form.distribution.set(*target, selected);
+                    }
+                    if index % 2 == 1 {
+                        ui.end_row();
+                    }
+                }
+            });
     }
 
     fn text_section(&mut self, ui: &mut egui::Ui) {
-        frost_checkbox(
-            ui,
-            &self.frost_theme,
-            &mut self.form.display_text,
-            "Display Text",
-        );
         ui.label(format!("Text ({} / 250)", self.form.text.chars().count()));
         themed_text_edit(
             ui,
             &self.frost_theme,
             egui::TextEdit::multiline(&mut self.form.text)
                 .desired_rows(4)
-                .desired_width(f32::INFINITY),
-            ControlSize::Md,
-        );
-        ui.label("DABS Info");
-        let mut dabs_info = String::new();
-        themed_text_edit_enabled(
-            ui,
-            &self.frost_theme,
-            false,
-            egui::TextEdit::multiline(&mut dabs_info)
-                .desired_rows(2)
                 .desired_width(f32::INFINITY),
             ControlSize::Md,
         );
@@ -1735,7 +1713,6 @@ impl DamApp {
         let mut edit_clicked = false;
         let mut discard_clicked = false;
         let mut download_clicked = false;
-        let mut send_clicked = false;
         let section_gap = self.frost_theme.spacing.md;
 
         ui.spacing_mut().item_spacing.y = 0.0;
@@ -1767,7 +1744,6 @@ impl DamApp {
             &mut edit_clicked,
             &mut discard_clicked,
             &mut download_clicked,
-            &mut send_clicked,
         );
 
         if edit_clicked {
@@ -1778,9 +1754,6 @@ impl DamApp {
         }
         if download_clicked {
             self.download_aixm();
-        }
-        if send_clicked {
-            self.send();
         }
     }
 
@@ -1798,7 +1771,7 @@ impl DamApp {
                     );
                 })
                 .response
-                .on_hover_text("AIXM draft differs from form. Send and Download AIXM will use the edited XML draft until the form changes or the draft is discarded.");
+                    .on_hover_text("Edited XML draft will be downloaded until the form changes or the draft is discarded.");
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if borderless_icon_button(ui, &self.frost_theme, ICON_X, "Close AIXM preview")
@@ -1819,7 +1792,7 @@ impl DamApp {
             Ok(()) => (
                 ICON_CIRCLE_CHECK,
                 egui::Color32::from_rgb(72, 210, 120),
-                "XML is well formed.\nSend and Download AIXM can use this payload.".to_owned(),
+                "XML is well formed.\nDownload AIXM can use this draft.".to_owned(),
             ),
             Err(error) => (
                 ICON_CIRCLE_X,
@@ -1839,7 +1812,7 @@ impl DamApp {
         }
 
         if self.aixm_preview.xml.trim().is_empty() {
-            ui.label("No AIXM payload is available.");
+            ui.label("No AIXM XML is available.");
             return;
         }
 
@@ -1874,12 +1847,11 @@ impl DamApp {
         edit_clicked: &mut bool,
         discard_clicked: &mut bool,
         download_clicked: &mut bool,
-        send_clicked: &mut bool,
     ) {
         let editable = self.aixm_preview.mode == AixmPreviewMode::Editing;
         let can_edit =
             self.aixm_preview.status.is_none() && !self.aixm_preview.xml.trim().is_empty();
-        let can_submit = can_edit && aixm_xml_well_formed(&self.aixm_preview.xml).is_ok();
+        let can_download = can_edit && aixm_xml_well_formed(&self.aixm_preview.xml).is_ok();
         let footer_size = egui::vec2(ui.available_width(), AIXM_PREVIEW_FOOTER_HEIGHT);
         let (footer_rect, _) = ui.allocate_exact_size(footer_size, egui::Sense::hover());
         let mut footer_ui = ui.new_child(
@@ -1923,25 +1895,11 @@ impl DamApp {
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
-                    .add_enabled_ui(can_submit, |ui| {
-                        ui.frost_button(
-                            &self.frost_theme,
-                            "Send",
-                            ControlVariant::Primary,
-                            ControlSize::Md,
-                        )
-                    })
-                    .inner
-                    .clicked()
-                {
-                    *send_clicked = true;
-                }
-                if ui
-                    .add_enabled_ui(can_submit, |ui| {
+                    .add_enabled_ui(can_download, |ui| {
                         ui.frost_button(
                             &self.frost_theme,
                             "Download AIXM",
-                            ControlVariant::Secondary,
+                            ControlVariant::Primary,
                             ControlSize::Md,
                         )
                     })
@@ -1978,7 +1936,8 @@ impl DamApp {
             .map(|bbox| bbox.center())
             .map(|center| walkers::lon_lat(center.lon, center.lat))
             .unwrap_or_else(|| walkers::lon_lat(8.22, 46.8));
-        let level_label = if self.form.display_levels {
+        let display_levels = self.form.display_levels && self.display_levels_supported();
+        let level_label = if display_levels {
             let label_text = self.current_level_label();
             manual_map
                 .as_ref()
@@ -2018,7 +1977,7 @@ impl DamApp {
             next_click,
             cursor_preview,
             Some(level_label_text.clone()),
-            self.form.display_levels,
+            display_levels,
         );
         let mut clicked_coordinate = None;
         walkers::Map::new(Some(&mut self.map_tiles), &mut self.map_memory, center)
@@ -2075,98 +2034,14 @@ impl DamApp {
             .unwrap_or_else(|| "000/999".to_owned())
     }
 
-    fn distribution_window(&mut self, ctx: &egui::Context) {
-        if !self.show_distribution {
-            return;
-        }
-
-        let mut open = self.show_distribution;
-        let content_rect = ctx.content_rect();
-        let preferred_card_width: f32 = 456.0;
-        let max_card_size = egui::vec2(
-            (content_rect.width() - 32.0).max(320.0),
-            (content_rect.height() - 32.0).max(280.0),
-        );
-        self.distribution_card.size = egui::vec2(
-            preferred_card_width.min(max_card_size.x),
-            self.distribution_card.size.y.min(max_card_size.y),
-        );
-
-        egui::Area::new(egui::Id::new("distribution_card_area"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(content_rect.min)
-            .show(ctx, |ui| {
-                ui.set_min_size(content_rect.size());
-                let response = drag_card(
-                    ui,
-                    &self.frost_theme,
-                    egui::Id::new("distribution_card"),
-                    &mut self.distribution_card,
-                    "Unit / Sector",
-                    |ui| {
-                        for region in ["Geneva", "Zurich"] {
-                            ui.heading(region);
-                            for group in unit_groups().iter().filter(|group| group.region == region)
-                            {
-                                Self::inset_panel(ui, &self.frost_theme, |ui| {
-                                    let mut unit_selected = group.sectors.iter().all(|sector| {
-                                        self.form.distribution.sectors.contains(sector.id)
-                                    });
-                                    let unit_response = frost_checkbox(
-                                        ui,
-                                        &self.frost_theme,
-                                        &mut unit_selected,
-                                        group.label,
-                                    );
-                                    if unit_response.changed() {
-                                        for sector in group.sectors {
-                                            if unit_selected {
-                                                self.form
-                                                    .distribution
-                                                    .sectors
-                                                    .insert(sector.id.to_owned());
-                                            } else {
-                                                self.form.distribution.sectors.remove(sector.id);
-                                            }
-                                        }
-                                    }
-
-                                    ui.horizontal_wrapped(|ui| {
-                                        for sector in group.sectors {
-                                            let mut selected =
-                                                self.form.distribution.sectors.contains(sector.id);
-                                            if frost_checkbox(
-                                                ui,
-                                                &self.frost_theme,
-                                                &mut selected,
-                                                sector.label,
-                                            )
-                                            .changed()
-                                            {
-                                                if selected {
-                                                    self.form
-                                                        .distribution
-                                                        .sectors
-                                                        .insert(sector.id.to_owned());
-                                                } else {
-                                                    self.form
-                                                        .distribution
-                                                        .sectors
-                                                        .remove(sector.id);
-                                                }
-                                            }
-                                        }
-                                    });
-                                });
-                            }
-                        }
-                    },
-                );
-                if response.closed {
-                    open = false;
-                }
-            });
-        self.show_distribution = open;
+    fn display_levels_supported(&self) -> bool {
+        !matches!(
+            (self.form.map_mode, self.form.manual.geometry_type),
+            (
+                MapMode::Manual,
+                ManualGeometryType::ParaSymbol | ManualGeometryType::TextNumber
+            )
+        )
     }
 
     fn reset_confirmation(&mut self, ctx: &egui::Context) {
@@ -2174,15 +2049,16 @@ impl DamApp {
             return;
         }
 
-        let mut open = self.show_reset_confirm;
         let mut reset = false;
         let mut cancel = false;
-        egui::Window::new("Reset form")
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
+        let response = egui::Modal::new(egui::Id::new("reset_form_modal"))
+            .backdrop_color(egui::Color32::from_black_alpha(120))
             .show(ctx, |ui| {
+                ui.set_min_width(360.0);
+                section_heading_inline(ui, &self.frost_theme, "Reset form");
+                ui.add_space(8.0);
                 ui.label("Reset all current creation inputs?");
+                ui.add_space(16.0);
                 ui.horizontal(|ui| {
                     if ui
                         .frost_button(
@@ -2205,50 +2081,35 @@ impl DamApp {
                         .clicked()
                     {
                         cancel = true;
+                        ui.close();
                     }
                 });
             });
 
         if reset {
             self.form = DamFormState::new(&self.catalog);
-            self.submission_status = SubmissionStatus::Idle;
+            self.export_status = ExportStatus::Idle;
             self.selected_period = 0;
             if let Some(map) = self.form.selected_map(&self.catalog) {
                 center_map_on_static_map(&mut self.map_memory, map);
             } else {
                 center_map_on_preview(&mut self.map_memory, &self.default_preview, 7.0);
             }
-            open = false;
+            self.show_reset_confirm = false;
+            return;
         }
-        if cancel {
-            open = false;
+
+        if cancel || response.should_close() {
+            self.show_reset_confirm = false;
         }
-        self.show_reset_confirm = open;
-    }
-
-    fn send(&mut self) {
-        self.submission_status = SubmissionStatus::Building;
-        let payload = match self.active_aixm_payload() {
-            Ok(payload) => payload,
-            Err(status) => {
-                self.submission_status = status;
-                return;
-            }
-        };
-
-        self.submission_status = SubmissionStatus::Submitting;
-        self.submission_status = match submit_payload(self.submission_endpoint.as_ref(), &payload) {
-            SubmissionResult::Sent(message) => SubmissionStatus::Sent { message },
-            SubmissionResult::Failed(message) => SubmissionStatus::Failed { message },
-        };
     }
 
     fn download_aixm(&mut self) {
-        self.submission_status = SubmissionStatus::Building;
+        self.export_status = ExportStatus::Building;
         let payload = match self.active_aixm_payload() {
             Ok(payload) => payload,
             Err(status) => {
-                self.submission_status = status;
+                self.export_status = status;
                 return;
             }
         };
@@ -2256,24 +2117,23 @@ impl DamApp {
         self.download_payload(payload);
     }
 
-    fn download_payload(&mut self, payload: dam_core::SubmissionPayload) {
-        self.submission_status = match platform::download_payload(&payload) {
-            Ok(path) => SubmissionStatus::Ready {
-                message: format!("Exported {path}"),
+    fn download_payload(&mut self, payload: dam_core::AixmPayload) {
+        self.export_status = match platform::download_payload(&payload) {
+            Ok(platform::DownloadOutcome::Saved(path)) => ExportStatus::Ready {
+                message: format!("AIXM file downloaded: {path}"),
             },
-            Err(message) => SubmissionStatus::Failed {
-                message: format!("Export failed: {message}"),
+            Ok(platform::DownloadOutcome::Cancelled) => ExportStatus::Idle,
+            Err(message) => ExportStatus::Failed {
+                message: format!("Download failed: {message}"),
             },
         };
     }
 
-    fn build_aixm_payload_from_form(
-        &self,
-    ) -> Result<dam_core::SubmissionPayload, SubmissionStatus> {
+    fn build_aixm_payload_from_form(&self) -> Result<dam_core::AixmPayload, ExportStatus> {
         let creation = self
             .form
             .to_creation(&self.catalog)
-            .map_err(SubmissionStatus::Invalid)?;
+            .map_err(ExportStatus::Invalid)?;
 
         build_aixm_payload(&creation).map_err(status_from_export_error)
     }
@@ -2302,42 +2162,33 @@ fn issues_tooltip(issues: &[ValidationIssue]) -> String {
         .join("\n")
 }
 
-fn submission_status_key(status: &SubmissionStatus) -> String {
+fn export_status_key(status: &ExportStatus) -> String {
     match status {
-        SubmissionStatus::Idle => "idle".to_owned(),
-        SubmissionStatus::Invalid(issues) => format!("invalid:{issues:?}"),
-        SubmissionStatus::Building => "building".to_owned(),
-        SubmissionStatus::Ready { message } => format!("ready:{message}"),
-        SubmissionStatus::Submitting => "submitting".to_owned(),
-        SubmissionStatus::Sent { message } => format!("sent:{message}"),
-        SubmissionStatus::Failed { message } => format!("failed:{message}"),
+        ExportStatus::Idle => "idle".to_owned(),
+        ExportStatus::Invalid(issues) => format!("invalid:{issues:?}"),
+        ExportStatus::Building => "building".to_owned(),
+        ExportStatus::Ready { message } => format!("ready:{message}"),
+        ExportStatus::Failed { message } => format!("failed:{message}"),
     }
 }
 
-fn toast_timeout_seconds(status: &SubmissionStatus) -> f64 {
+fn toast_timeout_seconds(status: &ExportStatus) -> f64 {
     match status {
-        SubmissionStatus::Building | SubmissionStatus::Submitting => f64::INFINITY,
-        SubmissionStatus::Invalid(_) => TOAST_VALIDATION_SECONDS,
-        SubmissionStatus::Idle
-        | SubmissionStatus::Ready { .. }
-        | SubmissionStatus::Sent { .. }
-        | SubmissionStatus::Failed { .. } => TOAST_VISIBLE_SECONDS,
+        ExportStatus::Building => f64::INFINITY,
+        ExportStatus::Invalid(_) => TOAST_VALIDATION_SECONDS,
+        ExportStatus::Idle | ExportStatus::Ready { .. } | ExportStatus::Failed { .. } => {
+            TOAST_VISIBLE_SECONDS
+        }
     }
 }
 
-fn render_submission_status_toast(
-    ui: &mut egui::Ui,
-    theme: &Theme,
-    status: &SubmissionStatus,
-) -> bool {
+fn render_export_status_toast(ui: &mut egui::Ui, theme: &Theme, status: &ExportStatus) -> bool {
     let (title, title_color) = match status {
-        SubmissionStatus::Idle => return false,
-        SubmissionStatus::Invalid(_) => ("Validation blocked", theme.palette.destructive),
-        SubmissionStatus::Building => ("Building payload", theme.palette.ring),
-        SubmissionStatus::Ready { .. } => ("Export ready", theme.palette.foreground),
-        SubmissionStatus::Submitting => ("Submitting", theme.palette.ring),
-        SubmissionStatus::Sent { .. } => ("Sent", theme.palette.foreground),
-        SubmissionStatus::Failed { .. } => ("Action failed", theme.palette.destructive),
+        ExportStatus::Idle => return false,
+        ExportStatus::Invalid(_) => ("Download blocked", theme.palette.destructive),
+        ExportStatus::Building => ("Building AIXM", theme.palette.ring),
+        ExportStatus::Ready { .. } => ("AIXM file ready", theme.palette.foreground),
+        ExportStatus::Failed { .. } => ("Download failed", theme.palette.destructive),
     };
 
     let mut dismiss = false;
@@ -2352,8 +2203,8 @@ fn render_submission_status_toast(
     ui.add_space(theme.spacing.xs);
 
     match status {
-        SubmissionStatus::Idle => {}
-        SubmissionStatus::Invalid(issues) => {
+        ExportStatus::Idle => {}
+        ExportStatus::Invalid(issues) => {
             for issue in issues.iter().take(4) {
                 wrapped_label(ui, format!("{}: {}", issue.field, issue.message));
             }
@@ -2361,16 +2212,11 @@ fn render_submission_status_toast(
                 wrapped_label(ui, format!("{} more issue(s)", issues.len() - 4));
             }
         }
-        SubmissionStatus::Building => {
-            wrapped_label(ui, "Building submission payload...");
+        ExportStatus::Building => {
+            wrapped_label(ui, "Building AIXM XML...");
         }
-        SubmissionStatus::Ready { message }
-        | SubmissionStatus::Sent { message }
-        | SubmissionStatus::Failed { message } => {
+        ExportStatus::Ready { message } | ExportStatus::Failed { message } => {
             wrapped_label(ui, message);
-        }
-        SubmissionStatus::Submitting => {
-            wrapped_label(ui, "Submitting payload...");
         }
     }
 
@@ -2381,31 +2227,26 @@ fn wrapped_label(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) {
     ui.add(egui::Label::new(text).wrap());
 }
 
-fn render_aixm_preview_status(ui: &mut egui::Ui, theme: &Theme, status: &SubmissionStatus) {
+fn render_aixm_preview_status(ui: &mut egui::Ui, theme: &Theme, status: &ExportStatus) {
     match status {
-        SubmissionStatus::Idle => {}
-        SubmissionStatus::Invalid(issues) => {
+        ExportStatus::Idle => {}
+        ExportStatus::Invalid(issues) => {
             ui.colored_label(
                 theme.palette.destructive,
                 "AIXM preview is blocked by validation errors.",
             );
             render_validation_issues(ui, theme, issues);
         }
-        SubmissionStatus::Building => {
+        ExportStatus::Building => {
             ui.label("Building AIXM preview...");
         }
-        SubmissionStatus::Ready { message }
-        | SubmissionStatus::Sent { message }
-        | SubmissionStatus::Failed { message } => {
-            let color = if matches!(status, SubmissionStatus::Failed { .. }) {
+        ExportStatus::Ready { message } | ExportStatus::Failed { message } => {
+            let color = if matches!(status, ExportStatus::Failed { .. }) {
                 theme.palette.destructive
             } else {
                 theme.palette.foreground
             };
             ui.colored_label(color, message);
-        }
-        SubmissionStatus::Submitting => {
-            ui.label("Submitting payload...");
         }
     }
 }
@@ -2425,11 +2266,11 @@ fn clamp_aixm_panel_width(requested_width: f32, content_width: f32) -> f32 {
         .min(max_width)
 }
 
-fn status_from_export_error(error: dam_core::ExportError) -> SubmissionStatus {
+fn status_from_export_error(error: dam_core::ExportError) -> ExportStatus {
     match error {
-        dam_core::ExportError::Validation(error) => SubmissionStatus::Invalid(error.issues),
-        error => SubmissionStatus::Failed {
-            message: format!("Payload build failed: {error}"),
+        dam_core::ExportError::Validation(error) => ExportStatus::Invalid(error.issues),
+        error => ExportStatus::Failed {
+            message: format!("AIXM export failed: {error}"),
         },
     }
 }
@@ -3292,9 +3133,11 @@ mod tests {
         form.selected_map_id = Some("10001".to_owned());
         let before = form.aixm_signature(&catalog);
 
-        let mut draft = AixmPreviewState::default();
-        draft.generated_xml = "<root/>".to_owned();
-        draft.xml = "<root><edited/></root>".to_owned();
+        let draft = AixmPreviewState {
+            generated_xml: "<root/>".to_owned(),
+            xml: "<root><edited/></root>".to_owned(),
+            ..Default::default()
+        };
 
         assert!(draft.has_edited_draft());
         assert_eq!(before, form.aixm_signature(&catalog));
@@ -3302,9 +3145,11 @@ mod tests {
 
     #[test]
     fn malformed_edited_aixm_draft_fails_well_formed_gate() {
-        let mut draft = AixmPreviewState::default();
-        draft.generated_xml = "<root/>".to_owned();
-        draft.xml = "<root>".to_owned();
+        let draft = AixmPreviewState {
+            generated_xml: "<root/>".to_owned(),
+            xml: "<root>".to_owned(),
+            ..Default::default()
+        };
 
         let error = aixm_xml_well_formed(&draft.xml).unwrap_err();
 

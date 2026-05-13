@@ -5,27 +5,27 @@ use crate::{DamCreation, DamMap};
 pub const AIXM_XML_CONTENT_TYPE: &str = "application/xml";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubmissionPayload {
+pub struct AixmPayload {
     pub filename: String,
     pub content_type: &'static str,
     pub body: String,
 }
 
-pub fn build_aixm_payload(creation: &DamCreation) -> Result<SubmissionPayload, ExportError> {
+pub fn build_aixm_payload(creation: &DamCreation) -> Result<AixmPayload, ExportError> {
     let body = to_aixm_xml(creation).map_err(|error| match error {
         AixmExportError::Validation(error) => ExportError::Validation(error),
         error => ExportError::Aixm(error),
     })?;
 
-    Ok(SubmissionPayload {
+    Ok(AixmPayload {
         filename: aixm_filename(creation),
         content_type: AIXM_XML_CONTENT_TYPE,
         body,
     })
 }
 
-pub fn build_aixm_payload_from_xml(creation: &DamCreation, body: String) -> SubmissionPayload {
-    SubmissionPayload {
+pub fn build_aixm_payload_from_xml(creation: &DamCreation, body: String) -> AixmPayload {
+    AixmPayload {
         filename: aixm_filename(creation),
         content_type: AIXM_XML_CONTENT_TYPE,
         body,
@@ -33,24 +33,48 @@ pub fn build_aixm_payload_from_xml(creation: &DamCreation, body: String) -> Subm
 }
 
 fn aixm_filename(creation: &DamCreation) -> String {
-    let map_part = match &creation.map {
-        DamMap::Predefined(selected) => sanitize_filename_part(&selected.id),
-        DamMap::Manual(_) => "manual".to_owned(),
-    };
-    format!(
-        "dam-{map_part}-{}.xml",
-        creation.date_range.start.format("%Y%m%d")
-    )
+    let date = creation.date_range.start.format("%Y%m%d");
+    match &creation.map {
+        DamMap::Predefined(selected) => format!(
+            "DAM-{}-{}-{date}.xml",
+            sanitize_filename_part(&selected.id),
+            sanitize_filename_part(&selected.name.to_uppercase())
+        ),
+        DamMap::Manual(manual) => format!(
+            "DAM-{}-{date}.xml",
+            sanitize_filename_part(&manual.name.to_uppercase())
+        ),
+    }
 }
 
 fn sanitize_filename_part(value: &str) -> String {
-    let sanitized = value
-        .trim()
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '-' || *ch == '_')
-        .collect::<String>();
+    let mut sanitized = String::new();
+    let mut last_was_separator = false;
+    for ch in value.trim().chars() {
+        let out = if ch.is_ascii_alphanumeric() {
+            Some(ch.to_ascii_uppercase())
+        } else if matches!(ch, '-' | '_' | ' ' | '/' | '\\' | ':' | '.' | '(' | ')') {
+            Some('-')
+        } else {
+            None
+        };
+        if let Some(out) = out {
+            if out == '-' {
+                if !last_was_separator && !sanitized.is_empty() {
+                    sanitized.push(out);
+                    last_was_separator = true;
+                }
+            } else {
+                sanitized.push(out);
+                last_was_separator = false;
+            }
+        }
+    }
+    while sanitized.ends_with('-') {
+        sanitized.pop();
+    }
     if sanitized.is_empty() {
-        "unknown".to_owned()
+        "UNKNOWN".to_owned()
     } else {
         sanitized
     }
@@ -60,8 +84,9 @@ fn sanitize_filename_part(value: &str) -> String {
 mod tests {
     use super::*;
     use crate::{
-        AixmExportError, AltitudeCorrection, BufferFilter, DamMap, DateRange,
-        DistributionSelection, ExportError, Level, LevelUnit, Period, SelectedStaticMap, TextInfo,
+        A9Level, AltitudeCorrection, BufferFilter, Coordinate, DamMap, DateRange,
+        DistributionSelection, ExportError, Level, LevelUnit, ManualGeometry, ManualMap,
+        ManualMapAttributes, ManualMapCategory, Period, SelectedStaticMap, TextInfo,
     };
     use chrono::{NaiveDate, NaiveTime};
     use std::collections::BTreeSet;
@@ -91,12 +116,10 @@ mod tests {
             altitude_correction: AltitudeCorrection::QnhCorr,
             upper_buffer: BufferFilter::Half,
             lower_buffer: BufferFilter::NoBuffer,
-            distribution: DistributionSelection {
-                sectors: BTreeSet::from(["GVA:INN".to_owned()]),
-            },
+            distribution: DistributionSelection::all(),
+            a9: A9Level::default(),
             text: TextInfo {
                 value: "comment".to_owned(),
-                display: true,
             },
         }
     }
@@ -104,7 +127,7 @@ mod tests {
     #[test]
     fn invalid_creation_does_not_build_aixm_payload() {
         let mut creation = valid_creation();
-        creation.distribution.sectors.clear();
+        creation.distribution = DistributionSelection::none();
 
         let error = build_aixm_payload(&creation).unwrap_err();
 
@@ -116,7 +139,7 @@ mod tests {
         let creation = valid_creation();
         let payload = build_aixm_payload(&creation).unwrap();
 
-        assert_eq!(payload.filename, "dam-50714-20260507.xml");
+        assert_eq!(payload.filename, "DAM-50714-HAUT-VALAIS-20260507.xml");
         assert_eq!(payload.content_type, AIXM_XML_CONTENT_TYPE);
         assert_eq!(payload.body, to_aixm_xml(&creation).unwrap());
     }
@@ -126,13 +149,36 @@ mod tests {
         let creation = valid_creation();
         let payload = build_aixm_payload_from_xml(&creation, "<xml/>".to_owned());
 
-        assert_eq!(payload.filename, "dam-50714-20260507.xml");
+        assert_eq!(payload.filename, "DAM-50714-HAUT-VALAIS-20260507.xml");
         assert_eq!(payload.content_type, AIXM_XML_CONTENT_TYPE);
         assert_eq!(payload.body, "<xml/>");
     }
 
     #[test]
-    fn unsupported_aixm_creation_does_not_build_payload() {
+    fn manual_filename_is_uppercase_and_sanitized() {
+        let mut creation = valid_creation();
+        creation.map = DamMap::Manual(ManualMap {
+            name: "my/manual para!".to_owned(),
+            geometry: ManualGeometry::ParaSymbol {
+                point: Some(Coordinate {
+                    lon: 7.0,
+                    lat: 46.0,
+                }),
+            },
+            attributes: ManualMapAttributes {
+                category: ManualMapCategory::Para,
+                lateral_buffer_nm: 0.0,
+            },
+            label_position: None,
+        });
+
+        let payload = build_aixm_payload(&creation).unwrap();
+
+        assert_eq!(payload.filename, "DAM-MY-MANUAL-PARA-20260507.xml");
+    }
+
+    #[test]
+    fn multiple_activation_periods_build_payload() {
         let mut creation = valid_creation();
         creation.periods.push(Period {
             start_indication: true,
@@ -143,11 +189,8 @@ mod tests {
             upper: Level::new(9_500, LevelUnit::Feet),
         });
 
-        let error = build_aixm_payload(&creation).unwrap_err();
+        let payload = build_aixm_payload(&creation).unwrap();
 
-        assert!(matches!(
-            error,
-            ExportError::Aixm(AixmExportError::UnsupportedPeriodCount { count: 2 })
-        ));
+        assert_eq!(payload.body.matches("<aixm:Timesheet").count(), 4);
     }
 }

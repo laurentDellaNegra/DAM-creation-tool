@@ -1,301 +1,202 @@
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DistributionSelection {
-    pub sectors: BTreeSet<String>,
+pub struct LegacyDistribution {
+    pub flags: [bool; 12],
 }
 
-impl DistributionSelection {
+pub type DistributionSelection = LegacyDistribution;
+
+impl LegacyDistribution {
+    pub const ORDER: [LegacyDistributionTarget; 12] = [
+        LegacyDistributionTarget::AccUpper,
+        LegacyDistributionTarget::AccLower,
+        LegacyDistributionTarget::App,
+        LegacyDistributionTarget::FicDelta,
+        LegacyDistributionTarget::Arfa,
+        LegacyDistributionTarget::TwrZurich,
+        LegacyDistributionTarget::TdiBern,
+        LegacyDistributionTarget::TdiBuochs,
+        LegacyDistributionTarget::TdiDubendorf,
+        LegacyDistributionTarget::TdiEmmen,
+        LegacyDistributionTarget::TdiLugano,
+        LegacyDistributionTarget::TdiStGallen,
+    ];
+
     pub fn all() -> Self {
-        Self {
-            sectors: unit_groups()
-                .iter()
-                .flat_map(|group| group.sectors.iter().map(|sector| sector.id.to_owned()))
-                .collect(),
-        }
+        Self { flags: [true; 12] }
+    }
+
+    pub fn none() -> Self {
+        Self { flags: [false; 12] }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.sectors.is_empty()
+        !self.flags.iter().any(|selected| *selected)
+    }
+
+    pub fn is_selected(&self, target: LegacyDistributionTarget) -> bool {
+        self.flags[target.index()]
+    }
+
+    pub fn set(&mut self, target: LegacyDistributionTarget, selected: bool) {
+        self.flags[target.index()] = selected;
+    }
+
+    pub fn selected_count(&self) -> usize {
+        self.flags.iter().filter(|selected| **selected).count()
+    }
+
+    pub fn to_legacy_flags(&self) -> String {
+        self.flags
+            .iter()
+            .map(|selected| if *selected { "1" } else { "0" })
+            .collect::<Vec<_>>()
+            .join("/")
     }
 }
 
-pub fn default_distribution() -> DistributionSelection {
-    DistributionSelection::all()
+impl Default for LegacyDistribution {
+    fn default() -> Self {
+        Self::all()
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct UnitGroup {
-    pub region: &'static str,
-    pub unit: &'static str,
-    pub label: &'static str,
-    pub sectors: &'static [Sector],
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum LegacyDistributionTarget {
+    AccUpper,
+    AccLower,
+    App,
+    FicDelta,
+    Arfa,
+    TwrZurich,
+    TdiBern,
+    TdiBuochs,
+    TdiDubendorf,
+    TdiEmmen,
+    TdiLugano,
+    TdiStGallen,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Sector {
-    pub id: &'static str,
-    pub label: &'static str,
+impl LegacyDistributionTarget {
+    pub const ORDER: [LegacyDistributionTarget; 12] = LegacyDistribution::ORDER;
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::AccUpper => "ACC_UPPER",
+            Self::AccLower => "ACC_LOWER",
+            Self::App => "APP",
+            Self::FicDelta => "FIC_DELTA",
+            Self::Arfa => "ARFA",
+            Self::TwrZurich => "TWR_ZURICH",
+            Self::TdiBern => "TDI_BERN",
+            Self::TdiBuochs => "TDI_BUOCHS",
+            Self::TdiDubendorf => "TDI_DUBENDORF",
+            Self::TdiEmmen => "TDI_EMMEN",
+            Self::TdiLugano => "TDI_LUGANO",
+            Self::TdiStGallen => "TDI_ST_GALLEN",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::AccUpper => "ACC Upper",
+            Self::AccLower => "ACC Lower",
+            Self::App => "APP",
+            Self::FicDelta => "FIC Delta",
+            Self::Arfa => "ARFA",
+            Self::TwrZurich => "TWR Zurich",
+            Self::TdiBern => "TDI Bern",
+            Self::TdiBuochs => "TDI Buochs",
+            Self::TdiDubendorf => "TDI Dubendorf",
+            Self::TdiEmmen => "TDI Emmen",
+            Self::TdiLugano => "TDI Lugano",
+            Self::TdiStGallen => "TDI St. Gallen",
+        }
+    }
+
+    pub const fn index(self) -> usize {
+        match self {
+            Self::AccUpper => 0,
+            Self::AccLower => 1,
+            Self::App => 2,
+            Self::FicDelta => 3,
+            Self::Arfa => 4,
+            Self::TwrZurich => 5,
+            Self::TdiBern => 6,
+            Self::TdiBuochs => 7,
+            Self::TdiDubendorf => 8,
+            Self::TdiEmmen => 9,
+            Self::TdiLugano => 10,
+            Self::TdiStGallen => 11,
+        }
+    }
 }
 
-pub fn unit_groups() -> &'static [UnitGroup] {
-    &UNIT_GROUPS
+pub fn default_distribution() -> LegacyDistribution {
+    LegacyDistribution::all()
 }
 
-const GVA_ACC_UPPER: &[Sector] = &[
-    Sector {
-        id: "GVA:UL1",
-        label: "L1",
-    },
-    Sector {
-        id: "GVA:UL2",
-        label: "L2",
-    },
-    Sector {
-        id: "GVA:UL3",
-        label: "L3",
-    },
-    Sector {
-        id: "GVA:UL4",
-        label: "L4",
-    },
-    Sector {
-        id: "GVA:UL5",
-        label: "L5",
-    },
-    Sector {
-        id: "GVA:UL6",
-        label: "L6",
-    },
-];
+pub fn legacy_distribution_from_catalog_stations(
+    stations: &[String],
+) -> Option<LegacyDistribution> {
+    if stations.is_empty() {
+        return None;
+    }
 
-const GVA_ACC_LOWER: &[Sector] = &[
-    Sector {
-        id: "GVA:INN",
-        label: "INN",
-    },
-    Sector {
-        id: "GVA:INS",
-        label: "INS",
-    },
-    Sector {
-        id: "GVA:INE",
-        label: "INE",
-    },
-    Sector {
-        id: "GVA:INL",
-        label: "INL",
-    },
-];
+    let mut distribution = LegacyDistribution::none();
+    let mut matched_any = false;
 
-const GVA_APP: &[Sector] = &[
-    Sector {
-        id: "GVA:ARR",
-        label: "ARR",
-    },
-    Sector {
-        id: "GVA:FIN",
-        label: "FIN",
-    },
-    Sector {
-        id: "GVA:DEP",
-        label: "DEP",
-    },
-    Sector {
-        id: "GVA:PRN",
-        label: "PRN",
-    },
-];
+    for station in stations {
+        let normalized = station.trim().to_ascii_uppercase().replace(['-', ' '], "_");
+        let targets: &[LegacyDistributionTarget] = match normalized.as_str() {
+            "APP" => &[LegacyDistributionTarget::App],
+            "FIC" | "DLT" | "DELTA" => &[LegacyDistributionTarget::FicDelta],
+            "ARF" | "ARFA" => &[LegacyDistributionTarget::Arfa],
+            "TWR" => &[LegacyDistributionTarget::TwrZurich],
+            "BRN" => &[LegacyDistributionTarget::TdiBern],
+            "BUO" => &[LegacyDistributionTarget::TdiBuochs],
+            "DUB" => &[LegacyDistributionTarget::TdiDubendorf],
+            "EMM" => &[LegacyDistributionTarget::TdiEmmen],
+            "LUG" => &[LegacyDistributionTarget::TdiLugano],
+            "STG" => &[LegacyDistributionTarget::TdiStGallen],
+            "UAC" => &[LegacyDistributionTarget::AccUpper],
+            _ => &[],
+        };
 
-const GVA_MIL_DLT_FIC: &[Sector] = &[
-    Sector {
-        id: "GVA:MIL",
-        label: "MIL",
-    },
-    Sector {
-        id: "GVA:DLT",
-        label: "DLT",
-    },
-    Sector {
-        id: "GVA:FIC",
-        label: "FIC",
-    },
-];
+        for target in targets {
+            distribution.set(*target, true);
+            matched_any = true;
+        }
+    }
 
-const GVA_SPVR_FMP: &[Sector] = &[
-    Sector {
-        id: "GVA:SPVR",
-        label: "SPVR",
-    },
-    Sector {
-        id: "GVA:FMP",
-        label: "FMP",
-    },
-];
+    if matched_any && !distribution.is_empty() {
+        Some(distribution)
+    } else {
+        None
+    }
+}
 
-const ZRH_ACC_UPPER: &[Sector] = &[
-    Sector {
-        id: "ZRH:UM1",
-        label: "M1",
-    },
-    Sector {
-        id: "ZRH:UM2",
-        label: "M2",
-    },
-    Sector {
-        id: "ZRH:UM3",
-        label: "M3",
-    },
-    Sector {
-        id: "ZRH:UM4",
-        label: "M4",
-    },
-    Sector {
-        id: "ZRH:UM5",
-        label: "M5",
-    },
-    Sector {
-        id: "ZRH:UM6",
-        label: "M6",
-    },
-];
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-const ZRH_ACC_LOWER: &[Sector] = &[
-    Sector {
-        id: "ZRH:LOW",
-        label: "W",
-    },
-    Sector {
-        id: "ZRH:LOS",
-        label: "S",
-    },
-    Sector {
-        id: "ZRH:LOE",
-        label: "E",
-    },
-    Sector {
-        id: "ZRH:LON",
-        label: "N",
-    },
-];
+    #[test]
+    fn default_distribution_exports_12_selected_flags() {
+        assert_eq!(
+            LegacyDistribution::all().to_legacy_flags(),
+            "1/1/1/1/1/1/1/1/1/1/1/1"
+        );
+    }
 
-const ZRH_APP: &[Sector] = &[
-    Sector {
-        id: "ZRH:APW",
-        label: "APW",
-    },
-    Sector {
-        id: "ZRH:FIN",
-        label: "FIN",
-    },
-    Sector {
-        id: "ZRH:APE",
-        label: "APE",
-    },
-    Sector {
-        id: "ZRH:CAP",
-        label: "CAP",
-    },
-    Sector {
-        id: "ZRH:DEP",
-        label: "DEP",
-    },
-    Sector {
-        id: "ZRH:RSV",
-        label: "RSV",
-    },
-    Sector {
-        id: "ZRH:PRN",
-        label: "PRN",
-    },
-];
+    #[test]
+    fn station_defaults_map_to_legacy_order_without_emptying_unknowns() {
+        let distribution =
+            legacy_distribution_from_catalog_stations(&["APP".into(), "FIC".into(), "BRN".into()])
+                .unwrap();
 
-const ZRH_ARFA_DLT_FIC: &[Sector] = &[
-    Sector {
-        id: "ZRH:ARFA",
-        label: "ARFA",
-    },
-    Sector {
-        id: "ZRH:FIC",
-        label: "FIC",
-    },
-    Sector {
-        id: "ZRH:DLT",
-        label: "DLT",
-    },
-];
-
-const ZRH_SPVR_FMP: &[Sector] = &[
-    Sector {
-        id: "ZRH:SPVR",
-        label: "SPVR",
-    },
-    Sector {
-        id: "ZRH:FMP",
-        label: "FMP",
-    },
-];
-
-const UNIT_GROUPS: [UnitGroup; 10] = [
-    UnitGroup {
-        region: "Geneva",
-        unit: "ACC_UPPER",
-        label: "ACC - upper",
-        sectors: GVA_ACC_UPPER,
-    },
-    UnitGroup {
-        region: "Geneva",
-        unit: "ACC_LOWER",
-        label: "ACC - lower",
-        sectors: GVA_ACC_LOWER,
-    },
-    UnitGroup {
-        region: "Geneva",
-        unit: "APP",
-        label: "APP",
-        sectors: GVA_APP,
-    },
-    UnitGroup {
-        region: "Geneva",
-        unit: "MIL_DLT_FIC",
-        label: "MIL/DLT/FIC",
-        sectors: GVA_MIL_DLT_FIC,
-    },
-    UnitGroup {
-        region: "Geneva",
-        unit: "SPVR_FMP",
-        label: "SPVR/FMP",
-        sectors: GVA_SPVR_FMP,
-    },
-    UnitGroup {
-        region: "Zurich",
-        unit: "ACC_UPPER",
-        label: "ACC - upper",
-        sectors: ZRH_ACC_UPPER,
-    },
-    UnitGroup {
-        region: "Zurich",
-        unit: "ACC_LOWER",
-        label: "ACC - lower",
-        sectors: ZRH_ACC_LOWER,
-    },
-    UnitGroup {
-        region: "Zurich",
-        unit: "APP",
-        label: "APP",
-        sectors: ZRH_APP,
-    },
-    UnitGroup {
-        region: "Zurich",
-        unit: "ARFA_DLT_FIC",
-        label: "ARFA/DLT/FIC",
-        sectors: ZRH_ARFA_DLT_FIC,
-    },
-    UnitGroup {
-        region: "Zurich",
-        unit: "SPVR_FMP",
-        label: "SPVR/FMP",
-        sectors: ZRH_SPVR_FMP,
-    },
-];
+        assert_eq!(distribution.to_legacy_flags(), "0/0/1/1/0/0/1/0/0/0/0/0");
+        assert!(legacy_distribution_from_catalog_stations(&["UNKNOWN".into()]).is_none());
+    }
+}
